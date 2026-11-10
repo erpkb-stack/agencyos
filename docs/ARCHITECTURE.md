@@ -43,7 +43,7 @@ SQLite file: agencyos/data/agencyos.db   (Alembic-managed)
 | Sessions | 32-byte random token in an HttpOnly, SameSite=Lax cookie (`Secure` in production). Only the SHA-256 hash is stored in `user_sessions`, so a DB leak does not leak live sessions. Logout revokes the row. Idle expiry configurable |
 | CSRF | Unsafe methods under `/api/` that carry a session cookie must send `X-CSRF-Token` = HMAC-SHA256(secret, session token). The value is also exposed in a readable `agencyos_csrf` cookie for the frontend |
 | Authorization | Roles FOUNDER > ADMIN > STAFF > READ_ONLY. `require_roles()` dependency on every protected route. READ_ONLY is blocked from all writes |
-| Rate limiting | Fixed-window per client IP: login 10/min, API 300/min. In-memory (single process) |
+| Rate limiting | Sliding window per client IP: login 10/min, API 300/min. In-memory (single process) |
 | Headers | CSP `default-src 'self'` (no inline scripts), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` |
 | CORS | Disabled by default (same-origin app). Allowed origins configurable via `CORS_ORIGINS` |
 | Errors | Uniform JSON `{error:{code,message,details}, request_id}`; stack traces only in logs |

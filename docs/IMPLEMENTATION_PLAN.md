@@ -44,7 +44,7 @@ Environment facts that shape the plan:
 | **2 — AI CEO** ✅ | Provider abstraction (OpenAI, Anthropic, Mock), BaseAgent + 11 agents, registry, orchestrator + state machine, conversations, CEO chat UI, agent management UI | CEO delegates one request to 3 agents under the mock provider; executions persisted |
 | **3 — Business management** ✅ | Prospects (CRUD, search, CSV, dedupe, timeline), clients, projects, project tasks, approvals UI | CRUD + approval tests green; every screen wired to API |
 | **4 — Marketing** ✅ | Campaigns, email templates/sequences, suppression list, funnels, landing-page generation + preview | Drafts only; approval required for any send/publish |
-| 5 — Finance & analytics | Revenue, expenses, invoices, payments, reports, CSV export, agent performance | Money math tested with Decimal |
+| **5 — Finance & analytics** ✅ | Revenue, expenses, invoices, payments, reports, CSV export, agent performance | Money math tested with Decimal |
 | 6 — Production readiness | Security review, coverage, Docker, deployment docs | Full suite green |
 
 ### Phase 1 task list
@@ -123,6 +123,22 @@ Environment facts that shape the plan:
 - [x] UI: Campaigns, Email Marketing (tabs), Funnels pages; approvals link to their record
 - [x] Tests: compliance, campaign approval flow, budget change, roles, preview/unsubscribe,
       suppression, funnel validation/preview headers/XSS escaping/publish, AI copy
+
+### Phase 5 task list
+
+- [x] Revenue (cash basis, payment-linked), expenses (soft delete, recurring flag), AI-usage cost
+- [x] Invoices: drafts, numbering, from client fees, exact Decimal totals, mark sent, void,
+      printable HTML; paid status derived only from payments (no overpay, no future dates)
+- [x] Summary: revenue, expenses, profit, margin, MRR, outstanding, overdue, categories, 12-month
+      series, client profitability estimate with documented allocation method
+- [x] Nine reports with a common shape, CSV export (formula-safe), AI summaries (draft-only)
+- [x] Report/finance day boundaries in the server's local time zone (fixes evening records
+      falling outside "today")
+- [x] Rate limiter switched to a sliding window (fixed-window reset allowed bursts and made a
+      test flaky at minute boundaries)
+- [x] UI: Finance (overview chart, invoices, payments, revenue, expenses, AI usage) and Analytics
+- [x] Tests: money rounding, invoice lifecycle, payments/status, summary and overdue,
+      profitability allocation, AI usage, roles, every report + CSV, report summary
 
 ## Technical risks
 

@@ -35,7 +35,7 @@ from app.utils.time import utcnow
 logger = logging.getLogger("agencyos.orchestrator")
 
 APPROVAL_TTL = timedelta(days=7)
-DRAFT_ONLY_TASK_TYPES = {"campaign_generate", "campaign_analyze", "email_generate", "funnel_generate"}
+DRAFT_ONLY_TASK_TYPES = {"campaign_generate", "campaign_analyze", "email_generate", "funnel_generate", "report_summary"}
 HISTORY_MESSAGES = 10
 
 
