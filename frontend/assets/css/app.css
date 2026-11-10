@@ -366,3 +366,49 @@ textarea.input.tall { min-height: 260px; font-family: var(--mono); font-size: 12
   .toolbar .input { width: 100%; }
 }
 .chat > .form-error { margin: 0 16px 10px; }
+
+/* ---------- Phase 3 ---------- */
+.progress { width: 120px; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
+.progress-fill { height: 100%; background: var(--primary); }
+.w-0 { width: 0%; }
+.w-5 { width: 5%; }
+.w-10 { width: 10%; }
+.w-15 { width: 15%; }
+.w-20 { width: 20%; }
+.w-25 { width: 25%; }
+.w-30 { width: 30%; }
+.w-35 { width: 35%; }
+.w-40 { width: 40%; }
+.w-45 { width: 45%; }
+.w-50 { width: 50%; }
+.w-55 { width: 55%; }
+.w-60 { width: 60%; }
+.w-65 { width: 65%; }
+.w-70 { width: 70%; }
+.w-75 { width: 75%; }
+.w-80 { width: 80%; }
+.w-85 { width: 85%; }
+.w-90 { width: 90%; }
+.w-95 { width: 95%; }
+.w-100 { width: 100%; }
+
+.score { font-weight: 600; font-variant-numeric: tabular-nums; }
+.score-high { color: var(--success); }
+.score-mid { color: var(--warning); }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.timeline li:last-child { border-bottom: 0; }
+.timeline .tl-meta { font-size: 12px; color: var(--text-faint); }
+.timeline .tl-comment { border-left: 3px solid var(--primary); padding-left: 10px; }
+.inline-select { height: 30px; padding: 0 8px; width: auto; font-size: 13px; }
+.dupe-list { margin: 8px 0 0; padding-left: 18px; }
+.file-input { padding: 8px; height: auto; }
+.three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 860px) {
+  .three-col { grid-template-columns: 1fr; }
+  .toolbar .input.inline-select, .toolbar select.input { width: 100%; }
+}
+/* Long forms: the dialog never exceeds the viewport; its body scrolls, header and buttons stay visible. */
+.modal { max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+.modal-body { overflow-y: auto; min-height: 0; }
+select.input.inline-select { width: auto; }

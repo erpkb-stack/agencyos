@@ -26,6 +26,18 @@ def list_approvals(
             "page": page, "page_size": page_size}
 
 
+@router.get("/{approval_id}")
+def get_approval(approval_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> dict[str, Any]:
+    from app.models.approvals import Approval
+    from app.utils.errors import NotFoundError
+
+    task_service.expire_overdue(db)
+    approval = db.get(Approval, approval_id)
+    if approval is None:
+        raise NotFoundError("Approval not found")
+    return task_service.approval_out(db, approval)
+
+
 @router.post("/{approval_id}/decision")
 def decide(approval_id: int, body: ApprovalDecisionIn, db: Session = Depends(get_db),
            user: User = Depends(require_admin)) -> dict[str, Any]:

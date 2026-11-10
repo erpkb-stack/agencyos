@@ -3,20 +3,23 @@
 Internal platform for running an AI-assisted marketing and automation agency: Founder dashboard,
 AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and approvals.
 
-**Status: Phases 1 (Foundation) and 2 (AI CEO) complete.** See
+**Status: Phases 1 (Foundation), 2 (AI CEO) and 3 (Business management) complete.** See
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the phase roadmap.
 
 | Works now | Coming next |
 |---|---|
-| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 3: Prospects (CSV), clients, projects |
-| Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | Phase 4: Campaigns, email drafts, funnels, landing pages |
-| **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | Phase 5: Finance and analytics |
-| **11 agents** (CEO + 10 specialists) with editable prompts/models, custom agents, test runs, execution history | Phase 6: Production hardening |
+| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 4: Campaigns, email drafts, funnels, landing pages |
+| Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | Phase 5: Finance and analytics |
+| **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | Phase 6: Production hardening |
+| **11 agents** (CEO + 10 specialists) with editable prompts/models, custom agents, test runs, execution history | |
+| **Prospects**: pipeline with search/filter/sort, duplicate detection, CSV import/export, activity timeline, convert to client, "Ask Sales Agent" | |
+| **Clients**: contract status, fees, projects, deliverables, invoices/payments view, activity | |
+| **Projects**: status workflow, tasks with assignees/due dates/dependencies, comments, deliverables, timeline, progress from tasks, "Send to agent" | |
 | **Task orchestration**: state machine, retries, cancellation, delegation limits, token + cost tracking | |
 | **Approvals**: every external action an agent proposes waits for a Founder/Admin decision | |
 | Providers: offline Mock (default), OpenAI, Anthropic | |
 
-Sidebar items for unbuilt modules are marked `P3`–`P5`; they open a page that says the module is
+Sidebar items for unbuilt modules are marked `P4`–`P5`; they open a page that says the module is
 not built yet. There are no placeholder buttons.
 
 ## Using the AI CEO
@@ -115,6 +118,20 @@ docker compose exec agencyos python -m app.cli create-user --email you@youragenc
 > Docker is not installed on the development Mac this was built on, so the Docker path has not
 > been run yet. The native Python path is fully tested.
 
+## Business records (Phase 3)
+
+- **Prospects** — add manually or import a UTF-8 CSV (max 2 MB / 5,000 rows; a company-name column
+  is required; common headers like *Company*, *Business Email*, *ZIP* are recognised). Duplicates are
+  detected by website domain, email, phone, or company name in the same city; the form shows the
+  match and lets you save anyway. Exports neutralise spreadsheet formulas. **Ask Sales Agent** sends
+  only that record to the Sales Agent as untrusted data. **Convert to client** creates an active
+  client and marks the prospect Won.
+- **Clients** — clients with active projects cannot be deleted (Founder/Admin only, soft delete).
+- **Projects** — once a project has tasks, progress is *done ÷ total*. A task can't start or finish
+  before the task it depends on is done; cycles are refused. Scope changes require a reason and
+  are written to the timeline. **Send to agent** hands a task to its assigned agent with the
+  project as context; agents still only draft and propose.
+
 ## Configuration
 
 All settings are environment variables (or `.env`). See [.env.example](.env.example). Key ones:
@@ -137,7 +154,8 @@ All settings are environment variables (or `.env`). See [.env.example](.env.exam
 agencyos/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/        route handlers (auth, dashboard, health, settings, ceo, agents, tasks, approvals)
+│   │   ├── api/v1/        route handlers (auth, dashboard, health, settings, ceo, agents, tasks, approvals,
+│   │   │                  prospects, clients, projects)
 │   │   ├── agents/        BaseAgent, CEOAgent + 10 specialists, registry, Pydantic I/O schemas
 │   │   ├── orchestrator/  state machine, delegation policy, engine, runners
 │   │   ├── providers/     mock, OpenAI, Anthropic adapters; pricing
@@ -146,7 +164,8 @@ agencyos/
 │   │   ├── models/        SQLAlchemy models for all 26 tables
 │   │   ├── schemas/       Pydantic request/response models
 │   │   ├── security/      passwords, tokens, rate limiter, auth dependencies
-│   │   ├── services/      business logic (auth, audit, dashboard, agents, tasks/approvals)
+│   │   ├── services/      business logic (auth, audit, dashboard, agents, tasks/approvals,
+│   │   │                  prospects, clients, projects)
 │   │   ├── utils/         errors, logging, time
 │   │   ├── middleware.py  request ID, security headers, access log
 │   │   ├── cli.py         init-db, create-user
@@ -182,5 +201,7 @@ agencyos/
   next one; a worker queue can replace the runner later.
 - The mock provider routes requests by keywords, so its choice of agents is approximate. Real
   models choose from the agent descriptions.
+- Duplicate detection compares phone numbers in Python over at most 500 candidate rows, which is
+  fine for a small agency's pipeline but would need an indexed phone column at larger scale.
 - Approving an action records the decision only. Sending, publishing and ad integrations arrive
   in later phases and will act only on approved requests.

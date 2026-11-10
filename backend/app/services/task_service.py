@@ -123,12 +123,12 @@ def get_task(db: Session, task_id: int) -> AgentTask:
 
 def create_task(db: Session, user: User, *, agent_id: int, title: str, instructions: str,
                 priority: TaskPriority, context: dict[str, Any] | None = None,
-                task_type: str = "direct") -> AgentTask:
+                task_type: str = "direct", project_id: int | None = None) -> AgentTask:
     agent = agent_service.get_agent(db, agent_id)
     if not agent.is_active:
         raise AppError("This agent is inactive; activate it first")
     task = AgentTask(
-        agent_id=agent.id, created_by_user_id=user.id, title=title, task_type=task_type,
+        agent_id=agent.id, created_by_user_id=user.id, title=title, task_type=task_type, project_id=project_id,
         priority=priority, status=S.PENDING, depth=0,
         input={"instructions": instructions, "context": context or {}},
     )
@@ -212,6 +212,7 @@ def task_summary(task: AgentTask) -> dict[str, Any]:
         "status": task.status.value, "phase": phase_of(task),
         "agent": {"id": task.agent.id, "name": task.agent.name, "key": task.agent.key} if task.agent else None,
         "attempts": task.attempts, "max_attempts": task.max_attempts, "depth": task.depth,
+        "project_id": task.project_id,
         "requires_approval": task.requires_approval, "error": task.error,
         "summary": result.get("summary"),
         "created_at": task.created_at, "started_at": task.started_at, "completed_at": task.completed_at,

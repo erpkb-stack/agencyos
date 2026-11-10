@@ -34,6 +34,11 @@ export const fmt = {
     return new Date(iso).toLocaleDateString();
   },
   datetime: (iso) => (iso ? new Date(iso).toLocaleString() : "—"),
+  // Today's date in the user's time zone (toISOString would give the UTC date).
+  today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  },
 };
 
 const STATUS_TONES = {
@@ -148,4 +153,108 @@ export const canAdmin = (user) => ["FOUNDER", "ADMIN"].includes(user.role);
 
 export function field(label, control, hint) {
   return el("div", { class: "field" }, el("label", { for: control.id }, label), control, hint ? el("span", { class: "field-hint" }, hint) : null);
+}
+
+// Declarative form fields. defs: [{ name, label, type, options, hint, required, full }].
+// type: text | email | url | tel | number | date | textarea | select | checkboxes.
+// read() returns trimmed values; empty inputs become null.
+export function buildForm(prefix, defs, values = {}) {
+  const controls = {};
+  const rows = [];
+  let pair = [];
+  const flush = () => {
+    if (pair.length) rows.push(pair.length === 2 ? el("div", { class: "form-row" }, pair) : pair[0]);
+    pair = [];
+  };
+  for (const d of defs) {
+    const id = `${prefix}-${d.name}`;
+    const value = values[d.name];
+    let control;
+    if (d.type === "textarea") {
+      control = el("textarea", { class: "input", id, maxlength: d.max ?? "10000" });
+      control.value = value ?? "";
+    } else if (d.type === "select") {
+      control = el("select", { class: "input", id }, (d.options ?? []).map((o) => {
+        const [v, label] = Array.isArray(o) ? o : [o, fmt.label(o)];
+        return el("option", { value: String(v), selected: String(value ?? d.default ?? "") === String(v) }, label);
+      }));
+    } else if (d.type === "checkboxes") {
+      const chosen = new Set((value ?? []).map(String));
+      control = el("div", { class: "chips", id }, (d.options ?? []).map(([v, label]) =>
+        el("label", { class: "check" }, el("input", { type: "checkbox", value: String(v), checked: chosen.has(String(v)) }), label)));
+    } else {
+      control = el("input", { class: "input", id, type: d.type ?? "text", value: value ?? "", required: d.required, min: d.min, max: d.max, step: d.step });
+    }
+    controls[d.name] = { control, def: d };
+    const wrapped = d.type === "checkboxes"
+      ? el("div", { class: "field" }, el("label", {}, d.label), control, d.hint ? el("span", { class: "field-hint" }, d.hint) : null)
+      : field(d.label + (d.required ? " *" : ""), control, d.hint);
+    if (d.full || d.type === "textarea" || d.type === "checkboxes") {
+      flush();
+      rows.push(wrapped);
+    } else {
+      pair.push(wrapped);
+      if (pair.length === 2) flush();
+    }
+  }
+  flush();
+  const read = () => {
+    const out = {};
+    for (const [name, { control, def }] of Object.entries(controls)) {
+      if (def.type === "checkboxes") {
+        out[name] = [...control.querySelectorAll("input:checked")].map((i) => (def.numeric ? Number(i.value) : i.value));
+        continue;
+      }
+      const raw = control.value.trim();
+      if (raw === "") out[name] = null;
+      else if (def.type === "number") out[name] = def.money ? raw : Number(raw);
+      else if (def.numeric) out[name] = Number(raw);
+      else out[name] = raw;
+    }
+    return out;
+  };
+  return { body: el("div", {}, rows), read, controls };
+}
+
+// Modal with a form and a primary action that calls submit(values); errors show inline.
+export function formDialog({ title, defs, values, submitLabel = "Save", submit, intro, wide = true }) {
+  const error = el("div", { class: "form-error hidden", role: "alert" });
+  const form = buildForm(`dlg${Date.now()}`, defs, values);
+  const save = el("button", { class: "btn btn-primary", type: "button" }, submitLabel);
+  const handle = modal({ title, wide, body: el("div", {}, error, intro ?? null, form.body), actions: [el("button", { class: "btn", type: "button", onclick: () => handle.close() }, "Cancel"), save] });
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    error.classList.add("hidden");
+    try {
+      await submit(form.read(), { error, close: handle.close });
+    } catch (err) {
+      error.replaceChildren(document.createTextNode(err.message));
+      if (Array.isArray(err.details)) error.append(el("ul", {}, err.details.map((d) => el("li", {}, `${d.field ?? ""}: ${d.message ?? ""}`))));
+      error.classList.remove("hidden");
+    } finally {
+      save.disabled = false;
+      // Errors render at the top of the form; bring them into view on long, scrolled forms.
+      if (!error.classList.contains("hidden")) error.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  });
+  return handle;
+}
+
+export function kvList(rows) {
+  return el("dl", { class: "kv" }, rows.filter(Boolean).flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v ?? "—")]));
+}
+
+export function progressBar(percent) {
+  const bar = el("div", { class: "progress", role: "progressbar", "aria-valuenow": String(percent), "aria-valuemin": "0", "aria-valuemax": "100" });
+  const fill = el("div", { class: `progress-fill w-${Math.round(Math.max(0, Math.min(100, percent)) / 5) * 5}` });
+  bar.append(fill);
+  return el("div", { class: "row" }, bar, el("span", { class: "small muted" }, `${percent}%`));
+}
+
+export function pager(state, total, pageSize, onChange) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  return el("div", { class: "pager" },
+    el("span", { class: "small muted" }, `${fmt.int(total)} total · page ${state.page} of ${pages}`),
+    el("button", { class: "btn btn-sm", type: "button", disabled: state.page <= 1, onclick: () => { state.page -= 1; onChange(); } }, "Previous"),
+    el("button", { class: "btn btn-sm", type: "button", disabled: state.page >= pages, onclick: () => { state.page += 1; onChange(); } }, "Next"));
 }

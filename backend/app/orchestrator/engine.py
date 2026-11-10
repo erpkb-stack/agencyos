@@ -113,7 +113,10 @@ class Orchestrator:
         return agent_class_for(agent.key)(config, provider, self.settings.llm_max_tokens, **extra)
 
     def _business_snapshot(self, db: Session) -> dict[str, Any]:
-        return {"generated_at": utcnow().isoformat(), "kpis": dashboard_service.kpis(db)}
+        from app.services import project_service
+
+        return {"generated_at": utcnow().isoformat(), "kpis": dashboard_service.kpis(db),
+                "open_projects": project_service.active_projects_snapshot(db)}
 
     def _attempt(self, db: Session, task: AgentTask, call: Callable[[], AgentResult]) -> AgentResult | None:
         """Run ``call`` with bounded retries. Returns None if the task failed or was cancelled."""
