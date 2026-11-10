@@ -61,10 +61,28 @@ the user agent identifies AgencyOS. Fetched text is reduced to facts and short e
 agents only as untrusted data; script contents are never extracted; contact details are not stored.
 Residual risk: DNS rebinding between the check and the connection.
 
+## Phase 9: two-factor authentication and sessions
+
+- TOTP (RFC 6238: SHA-1, 6 digits, 30 s, ±1 step for clock drift). A used step is stored per user,
+  so a code cannot be replayed, even inside its window.
+- The secret is encrypted at rest (Fernet; key derived from `SECRET_KEY` with HKDF) and is shown
+  only during setup. Setup is confirmed with a valid code before it takes effect.
+- Ten single-use recovery codes, shown once, stored as SHA-256 hashes.
+- Sign-in with 2FA: the password step returns no session, only a signed 5-minute token bound to
+  the current password hash (a password change voids pending sign-ins). Wrong codes count against
+  the same per-account limiter as wrong passwords (5 per 15 minutes).
+- Turning 2FA off needs the password and a current code or recovery code; new recovery codes need
+  a current code. Every change is audit-logged and other sessions are signed out on enable.
+- `REQUIRE_2FA_FOR_ADMINS` blocks Founders/Admins without 2FA (403 `mfa_setup_required`) from
+  everything but their own account settings.
+- Users can list their sessions (device, IP, last active) and sign out any other one.
+- The development-only demo login does not ask for a code; it is refused outside development.
+
 ## Known limitations / accepted risks
 
 - Rate limiting and the background task runner are in-memory and per process (run one process).
-- No multi-factor authentication. Recommended next step if more people get access.
+- Two-factor authentication is optional unless `REQUIRE_2FA_FOR_ADMINS=true`; there are no
+  hardware security keys (WebAuthn) yet.
 - No automatic account lockout notification by email (the app does not send email).
 - SQLite files and backups are not encrypted at rest; use disk encryption and encrypted off-site
   storage for backups.

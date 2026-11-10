@@ -430,3 +430,8 @@ select.input.inline-select { width: auto; }
 @media (max-width: 860px) {
   .field-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* Phase 9: two-factor authentication */
+.qr-wrap { display: inline-block; background: #fff; padding: 8px; border-radius: 8px; border: 1px solid var(--border); margin: 8px 0; }
+.qr-wrap img { display: block; width: 180px; height: 180px; }
+.recovery-codes { columns: 2; font-size: 15px; line-height: 1.8; background: var(--surface-2, var(--bg)); padding: 12px 16px; border-radius: 8px; white-space: pre-wrap; }

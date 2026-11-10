@@ -140,6 +140,21 @@ Run from `backend/` with `../.venv/bin/python -m app.cli …` (or `docker compos
 | `backup-db [--dest DIR] [--keep 14]` | Consistent SQLite backup with integrity check |
 | `check-config` | Show configuration and production warnings |
 | `worker` | Run the agent task queue in its own process (with `RUN_WORKER_IN_PROCESS=false`) |
+| `reset-2fa --email …` | Remove a user's authenticator (lost phone); signs them out everywhere |
+
+## Two-factor sign-in and devices (Phase 9)
+
+- **Settings → Two-factor authentication → Set up**: scan the QR code with any authenticator app
+  (1Password, Google Authenticator, Authy, Microsoft Authenticator), type the 6-digit code, and
+  save the 10 recovery codes shown once. Sign-in then asks for the password, then the code.
+- A lost phone: sign in with a recovery code (each works once), or an admin runs
+  `python -m app.cli reset-2fa --email …`.
+- **Settings → Signed-in devices** lists every browser signed in to your account; sign any of them
+  out, or all others at once.
+- `REQUIRE_2FA_FOR_ADMINS=true` makes Founders and Admins set up two-factor before they can use
+  anything except Settings.
+- Authenticator secrets are encrypted with a key derived from `SECRET_KEY`: changing `SECRET_KEY`
+  disables everyone's authenticator (they use `reset-2fa` and enrol again).
 
 ## Prospect website research (Phase 8)
 
@@ -309,7 +324,6 @@ agencyos/
   the payment instead (Founder/Admin).
 - SQLite stores `NUMERIC` as REAL; money is rounded to cents in Python. PostgreSQL stores exact values.
 - No self-service forgotten-password flow (nothing is emailed). Use `app.cli reset-password`.
-- No multi-factor authentication yet (see docs/SECURITY.md).
 - The OpenAI and Anthropic adapters are tested against fake SDK clients only; no live call has
   been made from this machine (no keys configured).
 - The mock provider routes requests by keywords, so its choice of agents is approximate. Real

@@ -1,9 +1,144 @@
 // Settings: profile, password change, system status, user management (founder/admin).
 import { api, showFormError } from "../api.js";
-import { confirmDialog, el, fmt, statusBadge, toast } from "../ui.js";
+import { confirmDialog, el, field, fmt, loadingState, modal, statusBadge, toast } from "../ui.js";
 
 function kv(rows) {
   return el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
+}
+
+// -- Two-factor authentication -----------------------------------------------------------------
+
+function showRecoveryCodes(codes) {
+  const text = codes.join("\n");
+  const download = el("a", { class: "btn", download: "agencyos-recovery-codes.txt", href: `data:text/plain;charset=utf-8,${encodeURIComponent(`AgencyOS recovery codes (each works once)\n\n${text}\n`)}` }, "Download");
+  const copy = el("button", { class: "btn", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(text); toast("Copied", "success"); } catch { toast("Copy failed; select the codes instead", "error"); } } }, "Copy");
+  modal({
+    title: "Save your recovery codes",
+    body: el("div", {},
+      el("p", { class: "notice notice-warning mb-16" }, "Each code signs you in once if you lose your phone. They are shown only now: store them in your password manager."),
+      el("pre", { class: "mono recovery-codes" }, text)),
+    actions: [copy, download],
+  });
+}
+
+function securityCard() {
+  const body = el("div", { class: "card-body" }, loadingState());
+  const card = el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, "Two-factor authentication")), body);
+
+  async function draw() {
+    let s;
+    try {
+      s = await api("/auth/2fa");
+    } catch (err) {
+      body.replaceChildren(el("p", { class: "form-error" }, err.message));
+      return;
+    }
+    if (s.enabled) {
+      const code = el("input", { class: "input", id: "mfa-manage-code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "7", placeholder: "123456" });
+      const password = el("input", { class: "input", id: "mfa-manage-pw", type: "password", autocomplete: "current-password" });
+      const error = el("div", { class: "form-error hidden", role: "alert" });
+      body.replaceChildren(
+        el("p", {}, statusBadge("ACTIVE"), " On since ", fmt.datetime(s.enabled_at), "."),
+        el("p", { class: "small muted" }, `${s.recovery_codes_left} recovery code(s) left.`),
+        error,
+        el("div", { class: "form-row" }, field("Current authenticator code", code), field("Password (to turn off)", password)),
+        el("div", { class: "row" },
+          el("button", { class: "btn", type: "button", onclick: async () => {
+            try {
+              const r = await api("/auth/2fa/recovery-codes", { method: "POST", body: { code: code.value.trim() } });
+              showRecoveryCodes(r.recovery_codes);
+              draw();
+            } catch (err) { showFormError(error, err); }
+          } }, "New recovery codes"),
+          s.required ? null : el("button", { class: "btn btn-ghost", type: "button", onclick: async () => {
+            if (!(await confirmDialog({ title: "Turn off two-factor authentication?", message: "Your account will be protected by your password only.", confirmLabel: "Turn off" }))) return;
+            try {
+              await api("/auth/2fa/disable", { method: "POST", body: { password: password.value, code: code.value.trim() } });
+              toast("Two-factor authentication turned off", "success");
+              draw();
+            } catch (err) { showFormError(error, err); }
+          } }, "Turn off")),
+      );
+      return;
+    }
+    const start = el("button", { class: "btn btn-primary", type: "button", onclick: async () => {
+      start.disabled = true;
+      try {
+        const setup = await api("/auth/2fa/setup", { method: "POST" });
+        const code = el("input", { class: "input", id: "mfa-confirm-code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "7", placeholder: "123456" });
+        const error = el("div", { class: "form-error hidden", role: "alert" });
+        const confirm = el("button", { class: "btn btn-primary", type: "button", onclick: async () => {
+          confirm.disabled = true;
+          try {
+            const r = await api("/auth/2fa/enable", { method: "POST", body: { code: code.value.trim() } });
+            toast("Two-factor authentication is on", "success");
+            showRecoveryCodes(r.recovery_codes);
+            draw();
+          } catch (err) {
+            showFormError(error, err);
+            confirm.disabled = false;
+          }
+        } }, "Turn on");
+        body.replaceChildren(
+          el("ol", { class: "list-plain small" },
+            el("li", {}, "Open your authenticator app (1Password, Google Authenticator, Authy, Microsoft Authenticator…)."),
+            el("li", {}, "Scan this QR code, or enter the key below."),
+            el("li", {}, "Type the 6-digit code it shows.")),
+          el("div", { class: "qr-wrap" }, el("img", { src: setup.qr_svg, alt: "QR code for your authenticator app", width: "180", height: "180" })),
+          el("p", { class: "small" }, "Key: ", el("code", { class: "mono" }, setup.secret.replace(/(.{4})/g, "$1 ").trim())),
+          error,
+          field("Code from the app", code),
+          el("div", { class: "row" }, confirm, el("button", { class: "btn btn-ghost", type: "button", onclick: draw }, "Cancel")),
+        );
+        code.focus();
+      } catch (err) {
+        toast(err.message, "error");
+        start.disabled = false;
+      }
+    } }, "Set up");
+    body.replaceChildren(
+      s.required ? el("p", { class: "notice notice-warning mb-16" }, "Your role requires two-factor authentication. Set it up to continue using AgencyOS.") : null,
+      el("p", { class: "muted" }, "Off. Add a second step at sign-in: a code from an authenticator app on your phone."),
+      start,
+    );
+  }
+  draw();
+  return card;
+}
+
+function sessionsCard() {
+  const list = el("div", {}, loadingState());
+  const card = el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, "Signed-in devices"),
+    el("button", { class: "btn btn-sm", type: "button", onclick: async () => {
+      if (!(await confirmDialog({ title: "Sign out other devices?", message: "Every other browser or device signed in to your account will be signed out.", confirmLabel: "Sign out others" }))) return;
+      try {
+        const r = await api("/auth/sessions/revoke-others", { method: "POST" });
+        toast(`${r.revoked} device(s) signed out`, "success");
+        load();
+      } catch (err) { toast(err.message, "error"); }
+    } }, "Sign out others")), list);
+
+  const device = (ua) => {
+    if (!ua) return "Unknown device";
+    const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : ua.split(" ")[0];
+    const os = /iPhone|iPad/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
+    return [browser, os].filter(Boolean).join(" on ");
+  };
+  async function load() {
+    try {
+      const { items } = await api("/auth/sessions");
+      list.replaceChildren(el("div", { class: "card-body" }, el("ul", { class: "timeline" }, items.map((s) => el("li", {},
+        el("div", { class: "row" }, el("strong", {}, device(s.user_agent)), s.current ? el("span", { class: "badge badge-success" }, "This device") : null,
+          s.current ? null : el("button", { class: "btn btn-sm btn-ghost ml-auto", type: "button", onclick: async () => {
+            try { await api(`/auth/sessions/${s.id}`, { method: "DELETE" }); toast("Device signed out", "success"); load(); } catch (err) { toast(err.message, "error"); }
+          } }, "Sign out")),
+        el("div", { class: "tl-meta" }, `Last active ${fmt.relative(s.last_seen_at)} · signed in ${fmt.datetime(s.created_at)}${s.ip_address ? ` · ${s.ip_address}` : ""}`))))));
+    } catch (err) {
+      list.replaceChildren(el("p", { class: "form-error card-body" }, err.message));
+    }
+  }
+  load();
+  return card;
 }
 
 function agentWorkText(o) {
@@ -163,6 +298,7 @@ export function renderSettings({ view, user, system }) {
   view.replaceChildren(
     el("div", { class: "page-head" }, el("div", {}, el("h1", {}, "Settings"), el("p", { class: "muted" }, "Your account, team and system configuration."))),
     el("div", { class: "grid two-col mb-16" }, profile, passwordCard()),
+    el("div", { class: "grid two-col mb-16" }, securityCard(), sessionsCard()),
     el("div", { class: "grid mb-16" }, sys),
     ...(isAdmin ? [usersCard(user)] : []),
   );

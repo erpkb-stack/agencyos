@@ -166,7 +166,11 @@ docker compose exec -T db pg_restore -U agencyos -d agencyos --clean < agencyos-
 | Add a user | Settings → Team (Founder/Admin), or `python -m app.cli create-user …` |
 | Deactivate / reactivate | Settings → Team, or `python -m app.cli set-active --email … --inactive` (signs them out everywhere) |
 | Forgotten password | `python -m app.cli reset-password --email …` (signs them out everywhere) |
+| Lost authenticator phone | Sign in with a recovery code, or `python -m app.cli reset-2fa --email …` (signs them out everywhere) |
 | Locked out after failed logins | Wait 15 minutes (5 failures per account per 15 minutes), or reset the password |
+
+Two-factor secrets are encrypted with a key derived from `SECRET_KEY`. Rotating `SECRET_KEY`
+therefore disables every enrolled authenticator; run `reset-2fa` for each user afterwards.
 
 Only a Founder can manage Founder and Admin accounts; the last active Founder cannot be
 deactivated or demoted; nobody can change their own role or status.

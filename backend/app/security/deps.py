@@ -56,11 +56,22 @@ def get_session_token(request: Request) -> str | None:
     return request.cookies.get(SESSION_COOKIE)
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+# Reachable before a required 2FA setup is finished (to set it up, see who you are, or leave).
+_MFA_SETUP_PATHS = ("/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/2fa", "/api/v1/settings/system",
+                    "/api/v1/auth/change-password", "/api/v1/auth/sessions")
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db),
+                     settings: Settings = Depends(get_settings)) -> User:
     user = auth_service.resolve_session(db, get_session_token(request))
     if user is None:
         raise AuthenticationError("Authentication required")
     request.state.user_id = user.id
+    if (settings.require_2fa_for_admins and user.role in (UserRole.FOUNDER, UserRole.ADMIN)
+            and not user.totp_enabled and not request.url.path.startswith(_MFA_SETUP_PATHS)):
+        exc = PermissionDeniedError("Turn on two-factor authentication in Settings to continue")
+        exc.code = "mfa_setup_required"
+        raise exc
     return user
 
 

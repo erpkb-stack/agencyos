@@ -48,6 +48,7 @@ Environment facts that shape the plan:
 | **6 — Production readiness** ✅ | Security review, coverage, Docker, deployment docs | Full suite green |
 | **7 — Parallel agents & queue** ✅ | Concurrent specialists, durable DB-backed task queue with separate-worker option, per-request and monthly AI cost limits | Same 3-agent request faster with a real model; queue survives restarts; limits enforced before every call |
 | **8 — Prospect website research** ✅ | Safe public-site fetcher, factual conversion signals, single and bulk checks, Sales Agent conversion review | No SSRF to private addresses; robots.txt honoured; no contact details copied |
+| **9 — Two-factor sign-in & sessions** ✅ | TOTP 2FA with recovery codes, optional policy for admins, active-session list and sign-out | Codes verified against RFC 6238 vectors; no session after the password alone; replay refused |
 
 ### Phase 1 task list
 
@@ -182,6 +183,19 @@ Environment facts that shape the plan:
 - [x] UI: website column and bulk actions on the list, Website check card on the prospect page
 - [x] Tests with a mocked network: SSRF cases, redirects to private IPs, robots.txt, oversize and
       non-HTML responses, signals for good/poor sites, API flows, roles; live check of example.com
+
+### Phase 9 task list
+
+- [x] Migration 0003: user 2FA columns (encrypted secret, enabled flag, last used step, hashed
+      recovery codes)
+- [x] TOTP verified against RFC 6238 test vectors; replay protection; Fernet-encrypted secret
+- [x] Two-step login with a signed, password-bound 5-minute token; shared per-account limiter
+- [x] Enrol (QR + key), recovery codes (single use, regenerate), disable with password + code
+- [x] `REQUIRE_2FA_FOR_ADMINS` policy; `app.cli reset-2fa`
+- [x] Active sessions list, sign out one / all others
+- [x] UI: code step on the sign-in page, Two-factor and Signed-in devices cards in Settings
+- [x] Tests: vectors, window/replay, enrolment, login, throttling, password change, disable,
+      regeneration, policy, sessions, CLI
 
 ## Technical risks
 

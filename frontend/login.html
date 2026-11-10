@@ -33,6 +33,21 @@
         <button class="btn btn-primary btn-block" id="login-submit" type="submit">Sign in</button>
       </form>
 
+      <form id="mfa-form" class="hidden" novalidate>
+        <p class="muted">Enter the 6-digit code from your authenticator app.</p>
+        <div class="field" id="mfa-code-field">
+          <label for="mfa-code">Authentication code</label>
+          <input class="input" id="mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*">
+        </div>
+        <div class="field hidden" id="mfa-recovery-field">
+          <label for="mfa-recovery">Recovery code</label>
+          <input class="input" id="mfa-recovery" name="recovery" autocomplete="off" maxlength="20" placeholder="xxxxx-xxxxx">
+        </div>
+        <button class="btn btn-primary btn-block" id="mfa-submit" type="submit">Verify</button>
+        <button class="btn btn-ghost btn-block mt-8" id="mfa-toggle" type="button">Use a recovery code instead</button>
+        <button class="btn btn-ghost btn-block" id="mfa-back" type="button">Back</button>
+      </form>
+
       <div id="demo-block" class="hidden">
         <div class="divider">development only</div>
         <button class="btn btn-block" id="demo-login" type="button">Continue as demo founder</button>

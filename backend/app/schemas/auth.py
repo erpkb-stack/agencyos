@@ -30,6 +30,7 @@ class UserOut(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool
+    totp_enabled: bool = False
     last_login_at: datetime | None
     created_at: datetime
 
@@ -58,6 +59,28 @@ class UpdateUserRequest(BaseModel):
 
     is_active: bool | None = None
     role: UserRole | None = None
+
+
+class MfaLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mfa_token: str = Field(min_length=10, max_length=300)
+    code: str | None = Field(default=None, max_length=12)
+    recovery_code: str | None = Field(default=None, max_length=20)
+
+
+class MfaCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=6, max_length=12)
+
+
+class MfaDisableRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=200)
+    code: str | None = Field(default=None, max_length=12)
+    recovery_code: str | None = Field(default=None, max_length=20)
 
 
 class DemoLoginStatus(BaseModel):

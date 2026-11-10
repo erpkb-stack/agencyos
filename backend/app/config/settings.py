@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     login_rate_limit_per_minute: int = Field(default=10, ge=1)
     api_rate_limit_per_minute: int = Field(default=300, ge=1)
     enable_demo_login: bool = False
+    # Founders and Admins must turn on two-factor authentication before using the app.
+    require_2fa_for_admins: bool = False
     # Interactive API docs (/docs, /openapi.json). Default: on except in production.
     enable_api_docs: bool | None = None
     # Largest request body accepted (bytes). CSV imports are capped separately at 2 MB.
