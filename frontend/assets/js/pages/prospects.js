@@ -1,6 +1,6 @@
 // Prospects: searchable pipeline list, CSV import/export, detail with activity timeline.
 import { api } from "../api.js";
-import { canWrite, confirmDialog, el, errorState, fmt, formDialog, kvList, loadingState, modal, pager, statusBadge, toast } from "../ui.js";
+import { canWrite, confirmDialog, el, errorState, fmt, formDialog, kvList, loadingState, modal, pager, poll, statusBadge, toast } from "../ui.js";
 
 const STAGES = ["NEW", "RESEARCHED", "QUALIFIED", "CONTACTED", "RESPONDED", "MEETING_SCHEDULED", "PROPOSAL_SENT", "NEGOTIATION", "WON", "LOST"];
 const SORTS = [["created_at", "Newest"], ["updated_at", "Recently updated"], ["company_name", "Company A–Z"], ["lead_score", "Lead score"], ["next_follow_up_on", "Next follow-up"], ["stage", "Stage"]];
@@ -147,14 +147,42 @@ export async function renderProspects(ctx) {
             el("td", {}, p.industry ?? "—"),
             el("td", {}, statusBadge(p.stage)),
             el("td", {}, scoreEl(p.lead_score)),
+            el("td", {}, siteCell(p)),
             el("td", {}, p.next_follow_up_on ?? "—"),
             el("td", {}, fmt.relative(p.updated_at))))
-        : [el("tr", {}, el("td", { colspan: "7", class: "empty-inline" }, filtered ? "No prospects match these filters." : "No prospects yet. Add one or import a CSV."))]));
+        : [el("tr", {}, el("td", { colspan: "8", class: "empty-inline" }, filtered ? "No prospects match these filters." : "No prospects yet. Add one or import a CSV."))]));
       pagerHost.replaceChildren(pager(state, data.total, PAGE_SIZE, load));
+      const busy = data.items.some((p) => ["QUEUED", "RUNNING"].includes(p.website_check?.status));
+      stopPoll?.();
+      stopPoll = busy ? poll(async () => { await load(); return false; }, 2000) : null;
     } catch (err) {
-      tbody.replaceChildren(el("tr", {}, el("td", { colspan: "7" }, err.message)));
+      tbody.replaceChildren(el("tr", {}, el("td", { colspan: "8" }, err.message)));
     }
   }
+  let stopPoll = null;
+
+  const checkAll = async () => {
+    const q = query();
+    q.delete("sort");
+    q.delete("order");
+    if (!(await confirmDialog({ title: "Check websites?", message: "AgencyOS will read the public websites of the prospects matching your current filters (up to 50), in the background. It respects each site's robots.txt and only records facts, never contact details.", confirmLabel: "Check websites" }))) return;
+    try {
+      const r = await api(`/prospects/website-checks?${q}`, { method: "POST", body: {} });
+      toast(`${r.queued} website check(s) queued${r.skipped.length ? `, ${r.skipped.length} skipped` : ""}`, "success");
+      load();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+  const review = async () => {
+    try {
+      const r = await api("/prospects/conversion-review", { method: "POST", body: {} });
+      toast(`Sales Agent is reviewing ${r.prospects} website(s)`, "success");
+      window.location.hash = `#/tasks/${r.task_id}`;
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
   const reset = () => { state.page = 1; load(); };
   let timer;
   search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { state.q = search.value.trim(); reset(); }, 300); });
@@ -169,13 +197,16 @@ export async function renderProspects(ctx) {
       el("div", {}, el("h1", {}, "Prospects"), el("p", { class: "muted" }, "Your sales pipeline. Records are entered by you or imported; agents never invent contact details.")),
       el("div", { class: "row" }, exportLink,
         canWrite(user) ? el("button", { class: "btn", type: "button", onclick: () => openImport(load) }, "Import CSV") : null,
+        canWrite(user) ? el("button", { class: "btn", type: "button", onclick: checkAll }, "Check websites") : null,
+        canWrite(user) ? el("button", { class: "btn", type: "button", onclick: review }, "Find conversion problems") : null,
         canWrite(user) ? el("button", { class: "btn btn-primary", type: "button", onclick: () => openProspectForm(null, (p) => (window.location.hash = `#/prospects/${p.id}`)) }, "Add prospect") : null)),
     el("section", { class: "card" },
       el("div", { class: "card-body" }, el("div", { class: "toolbar" }, search, stage, industry, city, sort, el("label", { class: "check" }, due, "Follow-up due"))),
-      el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["Company", "Location", "Industry", "Stage", "Score", "Follow-up", "Updated"].map((h) => el("th", {}, h)))), tbody)),
+      el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["Company", "Location", "Industry", "Stage", "Score", "Website", "Follow-up", "Updated"].map((h) => el("th", {}, h)))), tbody)),
       pagerHost),
   );
   load();
+  return () => stopPoll?.();
 }
 
 async function renderProspect(ctx, id) {
@@ -286,5 +317,63 @@ async function renderProspect(ctx, id) {
       p.opportunity ? el("div", { class: "section-gap" }, el("h3", {}, "Potential opportunity"), el("p", { class: "pre" }, p.opportunity)) : null,
       p.notes ? el("div", { class: "section-gap" }, el("h3", {}, "Notes"), el("p", { class: "pre" }, p.notes)) : null)),
       el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, "Activity timeline")), el("div", { class: "card-body" }, writer ? actForm : null, p.activities.length ? timeline : el("p", { class: "empty-inline" }, "No activity yet.")))),
+    websiteCard(p, writer, reload),
   );
+}
+
+function siteCell(p) {
+  const c = p.website_check;
+  if (!p.website) return el("span", { class: "faint" }, "—");
+  if (!c) return el("span", { class: "small faint" }, "not checked");
+  if (c.status !== "DONE") return statusBadge(c.status);
+  return el("span", { class: `badge ${c.issues >= 4 ? "badge-danger" : c.issues >= 2 ? "badge-warning" : "badge-success"}`, title: `Gap score ${c.score}` }, `${c.issues} issue${c.issues === 1 ? "" : "s"}`);
+}
+
+const SIGNAL_LABELS = [
+  ["https", "HTTPS"], ["mobile_viewport", "Mobile-friendly setup"], ["has_contact_form", "Contact / quote form"],
+  ["click_to_call", "Click-to-call phone"], ["phone_shown", "Phone number shown"], ["email_shown", "Email shown"],
+  ["online_booking", "Online booking"], ["live_chat", "Live chat / text widget"], ["analytics", "Analytics"],
+  ["mentions_reviews", "Mentions reviews"], ["meta_description", "Search description"], ["has_h1", "Main heading"],
+];
+
+function websiteCard(p, writer, reload) {
+  const c = p.website_check;
+  const checkBtn = writer && p.website ? el("button", { class: "btn btn-sm", type: "button", onclick: async (e) => {
+    e.target.disabled = true;
+    e.target.textContent = "Checking…";
+    try {
+      const r = await api(`/prospects/${p.id}/website-check`, { method: "POST" });
+      toast(r.status === "DONE" ? "Website checked" : `Check ${r.status.toLowerCase()}: ${r.error}`, r.status === "DONE" ? "success" : "error");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+    reload();
+  } }, c ? "Check again" : "Check website") : null;
+  let body;
+  if (!p.website) body = el("p", { class: "empty-inline" }, "Add a website to this prospect to check it.");
+  else if (!c) body = el("p", { class: "empty-inline" }, "Not checked yet. AgencyOS reads the public site (respecting robots.txt) and records facts such as forms, booking and mobile setup. Contact details are never copied.");
+  else if (["QUEUED", "RUNNING"].includes(c.status)) body = el("p", { class: "muted" }, statusBadge(c.status), " The check is in progress; refresh in a moment.");
+  else if (c.status !== "DONE") body = el("div", { class: "form-error" }, `${c.status === "BLOCKED" ? "Not checked" : "Check failed"}: ${c.error}`);
+  else {
+    const s = c.signals;
+    body = el("div", {},
+      el("p", { class: "small faint" }, `Checked ${fmt.datetime(c.finished_at)} · ${s.pages_checked} page(s) · ${(s.response_ms / 1000).toFixed(1)} s · `, el("a", { href: c.final_url, target: "_blank", rel: "noopener noreferrer" }, c.title || c.final_url)),
+      el("h3", { class: "section-gap" }, `Possible lead-conversion issues (gap score ${s.conversion_gap_score}/100)`),
+      s.conversion_flags.length ? el("ul", { class: "list-plain" }, s.conversion_flags.map((f) => el("li", {}, f.issue))) : el("p", { class: "small score-high" }, "✓ No obvious issues found."),
+      el("h3", { class: "section-gap" }, "What we found"),
+      el("div", { class: "chips" }, SIGNAL_LABELS.map(([k, label]) => el("span", { class: `badge ${s[k] ? "badge-success" : ""}` }, `${s[k] ? "✓" : "✗"} ${label}`))),
+      s.copyright_year ? el("p", { class: "small faint mt-8" }, `Copyright year on site: ${s.copyright_year}`) : null,
+      el("p", { class: "small faint mt-8" }, "Heuristic checks from the public site; confirm before quoting them to the prospect."),
+      writer ? el("div", { class: "row mt-8" }, el("button", { class: "btn btn-sm", type: "button", onclick: async () => {
+        try {
+          await api(`/prospects/${p.id}/apply-website-findings`, { method: "POST" });
+          toast("Findings added to observations", "success");
+          reload();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      } }, "Add findings to observations")) : null,
+    );
+  }
+  return el("section", { class: "card section-gap" }, el("div", { class: "card-head" }, el("h2", {}, "Website check"), checkBtn), el("div", { class: "card-body" }, body));
 }

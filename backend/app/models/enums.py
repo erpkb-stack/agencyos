@@ -67,6 +67,14 @@ def stages_from(stage: SalesStage) -> list[SalesStage]:
     return SALES_PIPELINE[SALES_PIPELINE.index(stage):]
 
 
+class WebsiteCheckStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    DONE = "DONE"
+    BLOCKED = "BLOCKED"  # refused by our safety rules or the site's robots.txt
+    ERROR = "ERROR"
+
+
 class ContractStatus(StrEnum):
     PROSPECTIVE = "PROSPECTIVE"
     ACTIVE = "ACTIVE"

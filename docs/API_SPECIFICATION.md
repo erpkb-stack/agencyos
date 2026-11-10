@@ -238,3 +238,16 @@ Other behaviour: `POST /auth/login` returns 429 after 5 failed attempts for the 
 15 minutes; request bodies over 5 MB return 413; chunked bodies without a length return 411;
 database constraint conflicts return 409; `/docs` and `/openapi.json` are disabled in production.
 
+
+## Phase 8 endpoints (implemented)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/prospects/{id}/website-check` | Check the prospect's public website now; returns the check (`status` DONE/BLOCKED/ERROR, `signals` incl. `conversion_flags[]` and `conversion_gap_score`, `pages[]`, `title`) |
+| GET | `/prospects/{id}/website-checks` | Last 20 checks |
+| POST | `/prospects/{id}/apply-website-findings` | Append the latest findings to observations; NEW → RESEARCHED |
+| POST | `/prospects/website-checks` | `{prospect_ids?}` (else the list filters) → 202 `{queued, skipped[]}`; runs in the background (max 50) |
+| POST | `/prospects/conversion-review` | `{prospect_ids?, limit}` → 202 `{task_id}`; Sales Agent ranks checked prospects by likely lead loss |
+
+`GET /prospects` items and `GET /prospects/{id}` now include `website_check` (summary / latest check).
+`POST /prospects/{id}/research` includes the latest website facts in the agent's context.

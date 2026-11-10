@@ -2,7 +2,7 @@
 
 from app.models.ai import Agent, AgentExecution, AgentTask, Conversation, Message
 from app.models.approvals import Approval
-from app.models.crm import Client, Prospect, ProspectActivity
+from app.models.crm import Client, Prospect, ProspectActivity, WebsiteCheck
 from app.models.delivery import Deliverable, Project, ProjectComment, ProjectTask, project_agents
 from app.models.finance import Expense, Invoice, InvoiceItem, Payment, Revenue
 from app.models.identity import AuditLog, User, UserSession
@@ -34,5 +34,6 @@ __all__ = [
     "Revenue",
     "User",
     "UserSession",
+    "WebsiteCheck",
     "project_agents",
 ]

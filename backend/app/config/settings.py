@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     # `python -m app.cli worker` separately to keep agent work out of the web process.
     run_worker_in_process: bool = True
     worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=60)
+    # Prospect website research (Phase 8)
+    web_research_enabled: bool = True
+    web_research_max_pages: int = Field(default=3, ge=1, le=5)
+    web_research_timeout_seconds: float = Field(default=10.0, ge=2, le=30)
+    web_research_max_bytes: int = Field(default=1_500_000, ge=50_000, le=5_000_000)
+    web_research_concurrency: int = Field(default=3, ge=1, le=8)
+    web_research_min_interval_seconds: float = Field(default=1.0, ge=0, le=10)
+    web_research_bulk_limit: int = Field(default=50, ge=1, le=500)
+
     # Estimated AI spend limits in USD (0 = no limit).
     ai_cost_limit_per_request: Decimal = Field(default=Decimal("2.00"), ge=0, max_digits=10, decimal_places=2)
     ai_cost_limit_per_month: Decimal = Field(default=Decimal("0"), ge=0, max_digits=10, decimal_places=2)
@@ -141,6 +150,10 @@ class Settings(BaseSettings):
     @property
     def database_backend(self) -> str:
         return self.database_url.split(":", 1)[0].split("+", 1)[0]
+
+    @property
+    def research_user_agent(self) -> str:
+        return f"AgencyOS-Research/1.0 (+{self.public_base_url})"
 
     @property
     def api_docs_enabled(self) -> bool:

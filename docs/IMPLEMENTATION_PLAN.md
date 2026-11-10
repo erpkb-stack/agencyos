@@ -47,6 +47,7 @@ Environment facts that shape the plan:
 | **5 — Finance & analytics** ✅ | Revenue, expenses, invoices, payments, reports, CSV export, agent performance | Money math tested with Decimal |
 | **6 — Production readiness** ✅ | Security review, coverage, Docker, deployment docs | Full suite green |
 | **7 — Parallel agents & queue** ✅ | Concurrent specialists, durable DB-backed task queue with separate-worker option, per-request and monthly AI cost limits | Same 3-agent request faster with a real model; queue survives restarts; limits enforced before every call |
+| **8 — Prospect website research** ✅ | Safe public-site fetcher, factual conversion signals, single and bulk checks, Sales Agent conversion review | No SSRF to private addresses; robots.txt honoured; no contact details copied |
 
 ### Phase 1 task list
 
@@ -168,6 +169,19 @@ Environment facts that shape the plan:
 - [x] Tests: parallelism (peak concurrency), isolation of failures, budget stops, monthly cap,
       atomic claiming under contention, priority order, worker draining a queue after a restart
 - [x] Live check with Claude Opus 5.5: same three-agent request 234 s → 98 s ($0.42)
+
+### Phase 8 task list
+
+- [x] Migration 0002: `prospect_website_checks`
+- [x] Fetcher: scheme/port/credential rules, public-address check on every hop (incl. redirects and
+      IP literals), robots.txt, honest user agent, per-site rate limit, size/time/content-type limits
+- [x] Deterministic signal extraction and conversion flags; script/style text never extracted;
+      contact values never stored
+- [x] Single check (sync), bulk checks (background, resumed after restart), apply findings
+- [x] Sales Agent context includes website facts; "Find conversion problems" ranking task
+- [x] UI: website column and bulk actions on the list, Website check card on the prospect page
+- [x] Tests with a mocked network: SSRF cases, redirects to private IPs, robots.txt, oversize and
+      non-HTML responses, signals for good/poor sites, API flows, roles; live check of example.com
 
 ## Technical risks
 

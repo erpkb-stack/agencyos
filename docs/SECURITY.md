@@ -50,6 +50,17 @@ also run in CI on every pull request.
 - **Logging/audit**: JSON logs with request IDs; audit log of logins (incl. failures), user and
   record changes, approvals, exports, payments.
 
+## Phase 8: outbound web requests
+
+Website research is the first feature that makes AgencyOS request external URLs, so it is treated
+as an SSRF surface: only http/https on ports 80/443, no credentials in URLs, every hostname and
+redirect target must resolve exclusively to public addresses (private, loopback, link-local,
+multicast, reserved and cloud-metadata ranges are refused), `localhost`/`.local`/`.internal`-style
+names are refused, responses are capped (1.5 MB, 10 s, HTML/text only), robots.txt is honoured and
+the user agent identifies AgencyOS. Fetched text is reduced to facts and short excerpts and reaches
+agents only as untrusted data; script contents are never extracted; contact details are not stored.
+Residual risk: DNS rebinding between the check and the connection.
+
 ## Known limitations / accepted risks
 
 - Rate limiting and the background task runner are in-memory and per process (run one process).
