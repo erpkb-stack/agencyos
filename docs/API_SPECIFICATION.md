@@ -145,12 +145,56 @@ Writes need FOUNDER, ADMIN or STAFF; deleting clients and projects needs FOUNDER
 
 `GET /approvals/{id}` was added for single approvals.
 
+## Phase 4 endpoints (implemented)
+
+Nothing here sends email, launches ads or publishes pages. "Request approval" endpoints create an
+`approvals` row with `payload.entity_type`/`entity_id`; the decision updates the record.
+
+### Campaigns
+| Method | Path | Description |
+|---|---|---|
+| GET/POST | `/campaigns` | List (filters `q`, `status`, `campaign_type`, `client_id`) / create a DRAFT |
+| GET/PATCH/DELETE | `/campaigns/{id}` | Detail (emails, drafts, audience summary, readiness, approvals, AI tasks, allowed status changes). PATCH on APPROVED/ACTIVE/PAUSED accepts only `budget` and raises a CHANGE_BUDGET approval |
+| PUT | `/campaigns/{id}/audience` | `{stages[], industry, city, min_score}` → segment counts (matched, with_email, suppressed, eligible) |
+| POST | `/campaigns/{id}/generate` | `{kind: strategy/emails/ads/audience, notes}` → 202 draft-only agent task |
+| POST | `/campaigns/{id}/import/{task_id}` | `{indexes?}` → email_draft deliverables become sequence emails; others saved as drafts |
+| DELETE | `/campaigns/{id}/drafts/{index}` | Remove a saved draft |
+| POST | `/campaigns/{id}/request-approval` | Email types need `consent_basis` + `confirm_compliance`; checks readiness (emails compliant, audience eligible, ad budget) |
+| POST | `/campaigns/{id}/status` | Manual ACTIVE/PAUSED/COMPLETED/CANCELLED per allowed transitions |
+| PUT | `/campaigns/{id}/metrics` | Manual metrics; returns derived rates and cost per lead |
+| POST | `/campaigns/{id}/analyze` | Analytics Agent task over the metrics → 202 |
+
+### Email
+| Method | Path | Description |
+|---|---|---|
+| GET/POST | `/emails/templates` | List (filters `campaign_id`, `kind`) / create; each item includes `compliance[]` |
+| GET/PATCH/DELETE | `/emails/templates/{id}` | Edits reset status to DRAFT; campaign emails follow the campaign's lock rules |
+| GET | `/emails/templates/{id}/preview?prospect_id=` | Personalised rendering; `missing_fields[]`, signed unsubscribe link, suppression flag |
+| POST | `/emails/check` | Compliance check for `{subject, body_text}` |
+| POST | `/emails/generate` | `{purpose: sequence/subject_lines/single, brief, campaign_id?}` → 202 |
+| GET | `/emails/ai-tasks` · POST `/emails/import/{task_id}` | Library AI drafts and import as templates |
+| POST | `/emails/segments/preview` | Audience counts for a filter |
+| POST | `/emails/recipients/check` | `{emails[]}` → eligible / suppressed / invalid / duplicates (nothing stored) |
+| GET/POST | `/emails/suppressions` | List / add (`reason` MANUAL/UNSUBSCRIBED/BOUNCED/COMPLAINT) |
+| DELETE | `/emails/suppressions/{id}` | FOUNDER/ADMIN; refused for UNSUBSCRIBED and COMPLAINT |
+| GET | `/emails/settings` | Sender identity (non-secret) and `sending_enabled: false` |
+| GET/POST | `/unsubscribe?e=&t=` (outside `/api`) | Public, HMAC-signed confirm page and POST that records an UNSUBSCRIBED suppression |
+
+### Funnels
+| Method | Path | Description |
+|---|---|---|
+| GET | `/funnels/templates` | hvac, plumbing, roofing, accounting, real_estate |
+| GET/POST | `/funnels` | List / create (optionally `template_key`) |
+| GET/PATCH/DELETE | `/funnels/{id}` | Detail with `validation[]`, `mobile_checks[]`, approvals, AI tasks. Editing an APPROVED/PUBLISHED funnel returns it to DRAFT |
+| GET | `/funnels/{id}/preview` | Generated HTML with preview banner; CSP `default-src 'none'; form-action 'none'`, `X-Frame-Options: SAMEORIGIN` |
+| GET | `/funnels/{id}/download` | HTML attachment for hosting |
+| POST | `/funnels/{id}/request-approval` | PUBLISH_WEBSITE approval; requires no validation errors and all mobile checks passing |
+| POST | `/funnels/{id}/published` | `{landing_page_url}` after hosting (APPROVED → PUBLISHED) |
+| POST | `/funnels/{id}/generate` · `/funnels/{id}/import/{task_id}` | Funnel Agent copy (Headline, Subheadline, Benefits, Proof, Call to action) and import |
+
 ## Planned endpoints (later phases)
 
 | Prefix | Phase | Main operations |
 |---|---|---|
-| `/campaigns` | 4 | CRUD, `POST /{id}/generate`, `POST /{id}/request-approval` |
-| `/emails` | 4 | templates CRUD, `POST /sequences/generate`, suppression list, `POST /unsubscribe` |
-| `/funnels` | 4 | CRUD, `GET /templates`, `POST /{id}/generate`, `GET /{id}/preview` |
 | `/finance` | 5 | revenue, expenses, invoices (+items), payments, `GET /summary`, `GET /reports/monthly` |
 | `/analytics` | 5 | daily / weekly / monthly reports, agent performance, `?format=csv` export |

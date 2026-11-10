@@ -17,7 +17,8 @@ FastAPI app (backend/app/main.py)
    ├─ orchestrator/*      (Phase 2) task state machine, delegation, retries, timeouts
    ├─ agents/*            (Phase 2) BaseAgent + specialised agents
    ├─ providers/*         (Phase 2) LLM providers: OpenAI, Anthropic, Mock
-   ├─ approvals/*         (Phase 3) approval gate used by every external action
+   ├─ approvals/*         approval gate: record-level requests + per-entity decision handlers
+   ├─ marketing/*         email compliance, funnel templates, landing-page renderer/validator
    ├─ integrations/*      (Phase 4+) email/CRM/calendar/ads interfaces + mock implementations
    ├─ models/*            SQLAlchemy ORM
    └─ database/*          engine, session factory, base mixins
@@ -98,6 +99,21 @@ Schemas are converted once for both vendors (`strict_json_schema`: inline `$ref`
 required, `additionalProperties: false`); value limits are enforced afterwards by Pydantic.
 Costs use list prices in `app/providers/pricing.py`; unknown models report no cost rather than a guess.
 - `MockLLMProvider` returns deterministic, schema-valid output so the whole system runs offline.
+
+## Marketing safety model (Phase 4)
+
+- **Draft-only agent work.** Tasks of type `campaign_generate`, `campaign_analyze`, `email_generate`
+  and `funnel_generate` never create approvals from agent proposals; approval is requested for the
+  whole record by a person, with the full context (audience size, consent basis, budget).
+- **Record-level approvals.** `approvals.payload.entity_type/entity_id` link an approval to a campaign
+  or funnel; `app.approvals.settle()` calls the handler the owning service registered. Content is
+  locked while awaiting approval, and edits after approval return the record to draft.
+- **No external execution.** "Active" and "Published" are set by a person after acting in an
+  external tool; the audit log records that AgencyOS did not send or publish anything.
+- **Landing-page preview** is served with its own CSP (`default-src 'none'`, inline styles only,
+  `form-action 'none'`) inside a sandboxed iframe; the middleware keeps route-set security headers.
+- **Unsubscribe** links carry `HMAC(SECRET_KEY, email)`, so the public page needs no login and
+  cannot be used to suppress arbitrary addresses.
 
 ## Configuration
 

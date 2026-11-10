@@ -37,9 +37,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         response.headers["X-Request-ID"] = request_id
         path = request.url.path
         is_docs = path in ("/docs", "/redoc") or path.startswith("/docs/")
-        response.headers["Content-Security-Policy"] = DOCS_CSP if is_docs else CSP
+        # Routes may set a stricter or route-specific policy (e.g. sandboxed landing-page previews).
+        response.headers.setdefault("Content-Security-Policy", DOCS_CSP if is_docs else CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if path.startswith("/api/"):

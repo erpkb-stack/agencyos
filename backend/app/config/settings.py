@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     llm_max_tokens: int = Field(default=16000, ge=256, le=64000)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
 
+    # Agency identity used in email drafts (CAN-SPAM: sender + postal address) and unsubscribe links
+    agency_name: str = ""
+    agency_address: str = ""
+    sender_name: str = ""
+    sender_email: str = ""
+    public_base_url: str = "http://localhost:8000"
+
     # Orchestrator limits (enforced in Python, not by the model)
     orchestrator_max_subtasks: int = Field(default=5, ge=1, le=10)
     orchestrator_max_depth: int = Field(default=2, ge=1, le=3)

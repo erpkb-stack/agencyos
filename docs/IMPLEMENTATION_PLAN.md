@@ -43,7 +43,7 @@ Environment facts that shape the plan:
 | **1 — Foundation** ✅ | Config, logging, DB + Alembic, full schema, auth (sessions, roles, CSRF, rate limit), health checks, error handling, app shell, dashboard, settings | Tests green; app runs at :8000; login + dashboard verified in browser |
 | **2 — AI CEO** ✅ | Provider abstraction (OpenAI, Anthropic, Mock), BaseAgent + 11 agents, registry, orchestrator + state machine, conversations, CEO chat UI, agent management UI | CEO delegates one request to 3 agents under the mock provider; executions persisted |
 | **3 — Business management** ✅ | Prospects (CRUD, search, CSV, dedupe, timeline), clients, projects, project tasks, approvals UI | CRUD + approval tests green; every screen wired to API |
-| 4 — Marketing | Campaigns, email templates/sequences, suppression list, funnels, landing-page generation + preview | Drafts only; approval required for any send/publish |
+| **4 — Marketing** ✅ | Campaigns, email templates/sequences, suppression list, funnels, landing-page generation + preview | Drafts only; approval required for any send/publish |
 | 5 — Finance & analytics | Revenue, expenses, invoices, payments, reports, CSV export, agent performance | Money math tested with Decimal |
 | 6 — Production readiness | Security review, coverage, Docker, deployment docs | Full suite green |
 
@@ -106,6 +106,23 @@ Environment facts that shape the plan:
 - [x] UI: Prospects, Clients, Projects pages; scrollable dialogs; shared form builder
 - [x] Tests: prospect CRUD/search/duplicates/CSV/conversion, client CRUD/rules, project tasks,
       dependencies, scope rule, deliverables, agent hand-offs, roles
+
+### Phase 4 task list
+
+- [x] Approval gate (`app/approvals`) for record-level approvals with per-entity handlers; Founder
+      may approve own requests, Admins may not
+- [x] Campaigns: CRUD, AI drafting (draft-only tasks: agent send/launch proposals are not queued),
+      import, audience segments from prospects, readiness checks, approval with consent basis,
+      manual status after approval, budget-change approvals, manual metrics + AI analysis
+- [x] Email: templates and sequences, compliance (sender, postal address, unsubscribe, deceptive
+      subjects, spam phrases, unknown merge fields), personalised preview with real prospect data,
+      suppression list (opt-outs permanent), signed public unsubscribe, recipient-list check
+- [x] Funnels: 5 industry templates, lead-field builder, landing-page renderer (escaped,
+      self-contained, no scripts), form and mobile validation, sandboxed preview, download,
+      publish approval, mark-as-published, AI copy import
+- [x] UI: Campaigns, Email Marketing (tabs), Funnels pages; approvals link to their record
+- [x] Tests: compliance, campaign approval flow, budget change, roles, preview/unsubscribe,
+      suppression, funnel validation/preview headers/XSS escaping/publish, AI copy
 
 ## Technical risks
 

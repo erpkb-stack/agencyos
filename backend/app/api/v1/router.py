@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from app.api.v1 import (
-    agents, approvals, auth, ceo, clients, dashboard, health, projects, prospects, system_settings, tasks,
+    agents, approvals, auth, campaigns, ceo, clients, dashboard, emails, funnels, health, projects, prospects,
+    system_settings, tasks,
 )
 from app.security.deps import enforce_api_rate_limit, enforce_csrf
 
@@ -19,3 +20,6 @@ api_router.include_router(approvals.router)
 api_router.include_router(prospects.router)
 api_router.include_router(clients.router)
 api_router.include_router(projects.router)
+api_router.include_router(campaigns.router)
+api_router.include_router(emails.router)
+api_router.include_router(funnels.router)

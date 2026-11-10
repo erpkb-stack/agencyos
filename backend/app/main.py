@@ -93,6 +93,47 @@ def create_app() -> FastAPI:
     def _login_page() -> FileResponse:
         return FileResponse(FRONTEND_DIR / "login.html")
 
+    # Public unsubscribe page reached from links in emails. No login: the HMAC token proves the link.
+    from fastapi import Depends, Form
+    from fastapi.responses import HTMLResponse
+    from sqlalchemy.orm import Session
+
+    from app.database.session import get_db
+    from app.security.deps import enforce_api_rate_limit
+    from app.services import email_service
+
+    def _page(title: str, body: str) -> HTMLResponse:
+        from html import escape
+
+        return HTMLResponse(
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            f"<title>{escape(title)}</title><link rel=\"stylesheet\" href=\"/assets/css/app.css\"></head>"
+            f"<body class=\"auth-page\"><main class=\"card auth-card\"><h1>{escape(title)}</h1>{body}</main></body></html>"
+        )
+
+    @app.get("/unsubscribe", include_in_schema=False, dependencies=[Depends(enforce_api_rate_limit)])
+    def _unsubscribe_form(e: str = "", t: str = "") -> HTMLResponse:
+        from html import escape
+
+        from app.marketing import compliance
+
+        if not compliance.unsubscribe_valid(e.strip().lower(), t, settings.secret_key):
+            return _page("Link not valid", "<p class=\"muted\">This unsubscribe link is incomplete or invalid.</p>")
+        return _page("Unsubscribe", (
+            f"<p class=\"muted\">Stop marketing emails to <strong>{escape(e)}</strong>?</p>"
+            "<form method=\"post\" action=\"/unsubscribe\">"
+            f"<input type=\"hidden\" name=\"e\" value=\"{escape(e)}\"><input type=\"hidden\" name=\"t\" value=\"{escape(t)}\">"
+            "<button class=\"btn btn-primary btn-block\" type=\"submit\">Unsubscribe</button></form>"
+        ))
+
+    @app.post("/unsubscribe", include_in_schema=False, dependencies=[Depends(enforce_api_rate_limit)])
+    def _unsubscribe(e: str = Form(""), t: str = Form(""), db: Session = Depends(get_db)) -> HTMLResponse:
+        if not email_service.unsubscribe(db, settings, e, t):
+            return _page("Link not valid", "<p class=\"muted\">This unsubscribe link is incomplete or invalid.</p>")
+        db.commit()
+        return _page("You're unsubscribed", "<p class=\"muted\">You will not receive further marketing emails at this address.</p>")
+
     @app.get("/favicon.ico", include_in_schema=False)
     def _favicon() -> RedirectResponse:
         return RedirectResponse("/assets/favicon.svg")
