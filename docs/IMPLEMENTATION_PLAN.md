@@ -42,7 +42,7 @@ Environment facts that shape the plan:
 |---|---|---|
 | **1 — Foundation** ✅ | Config, logging, DB + Alembic, full schema, auth (sessions, roles, CSRF, rate limit), health checks, error handling, app shell, dashboard, settings | Tests green; app runs at :8000; login + dashboard verified in browser |
 | **2 — AI CEO** ✅ | Provider abstraction (OpenAI, Anthropic, Mock), BaseAgent + 11 agents, registry, orchestrator + state machine, conversations, CEO chat UI, agent management UI | CEO delegates one request to 3 agents under the mock provider; executions persisted |
-| 3 — Business management | Prospects (CRUD, search, CSV, dedupe, timeline), clients, projects, project tasks, approvals UI | CRUD + approval tests green; every screen wired to API |
+| **3 — Business management** ✅ | Prospects (CRUD, search, CSV, dedupe, timeline), clients, projects, project tasks, approvals UI | CRUD + approval tests green; every screen wired to API |
 | 4 — Marketing | Campaigns, email templates/sequences, suppression list, funnels, landing-page generation + preview | Drafts only; approval required for any send/publish |
 | 5 — Finance & analytics | Revenue, expenses, invoices, payments, reports, CSV export, agent performance | Money math tested with Decimal |
 | 6 — Production readiness | Security review, coverage, Docker, deployment docs | Full suite green |
@@ -88,6 +88,24 @@ Environment facts that shape the plan:
       against fake SDK clients
 - [ ] Not verified: real OpenAI / Anthropic calls (no keys on this machine; adapters are tested
       against fake clients only)
+
+### Phase 3 task list
+
+- [x] Prospects: CRUD with soft delete, validation (email, phone, website), search/filter/sort/paging
+- [x] Duplicate detection (domain, email, phone, company + city) with explicit override
+- [x] CSV import (size/row limits, header aliases, per-row errors, duplicate skipping) and export
+      (formula-injection safe)
+- [x] Activity timeline (manual notes/calls, stage changes, agent tasks); convert prospect → client
+- [x] Clients: CRUD, contract status, fee validation, 360° view (projects, deliverables,
+      invoices/payments, activity); deletion blocked while projects are active
+- [x] Projects: status workflow, assigned agents, tasks (assignee person/agent, due dates,
+      dependencies with cycle and blocking checks), comments, deliverables, timeline,
+      progress from tasks, explicit scope-change reason
+- [x] Agents use the records: "Ask Sales Agent" on a prospect, "Send to agent" on a project task,
+      open projects in the business snapshot for Client Success / Finance / Analytics
+- [x] UI: Prospects, Clients, Projects pages; scrollable dialogs; shared form builder
+- [x] Tests: prospect CRUD/search/duplicates/CSV/conversion, client CRUD/rules, project tasks,
+      dependencies, scope rule, deliverables, agent hand-offs, roles
 
 ## Technical risks
 

@@ -18,7 +18,8 @@ function readCookie(name) {
 
 export async function api(path, { method = "GET", body, redirectOn401 = true } = {}) {
   const headers = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const isForm = body instanceof FormData;
+  if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   if (UNSAFE.has(method)) {
     const csrf = readCookie("agencyos_csrf");
     if (csrf) headers["X-CSRF-Token"] = csrf;
@@ -30,7 +31,7 @@ export async function api(path, { method = "GET", body, redirectOn401 = true } =
       method,
       headers,
       credentials: "same-origin",
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, "network_error", "Cannot reach the AgencyOS server. Is it running?");

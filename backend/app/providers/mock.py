@@ -300,8 +300,15 @@ class MockLLMProvider:
         )
 
     def _spec_client_success(self, topic: str, data: dict[str, Any]):
+        projects = (data.get("business_snapshot") or {}).get("open_projects") or []
+        lines = "\n".join(
+            f"- {p['project']} ({p.get('client') or 'no client'}): {p['status']}, {p['completion_percent']}% "
+            f"({p['tasks_done']}/{p['tasks_total']} tasks), due {p.get('due_date') or 'not set'}"
+            for p in projects
+        ) or "No open projects in the database."
         return (
-            [{"title": "Client and project status", "kind": "report", "content": self._snapshot_lines(data)},
+            [{"title": "Client and project status", "kind": "report",
+              "content": f"Open projects:\n{lines}\n\n{self._snapshot_lines(data)}"},
              {"title": "Onboarding checklist", "kind": "checklist",
               "content": "1. Kick-off call\n2. Access to website/CRM\n3. Brand assets\n4. Success metrics agreed\n5. First report date set"}],
             ["Schedule a monthly check-in with every active client."],

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 
-from app.api.v1 import agents, approvals, auth, ceo, dashboard, health, system_settings, tasks
+from app.api.v1 import (
+    agents, approvals, auth, ceo, clients, dashboard, health, projects, prospects, system_settings, tasks,
+)
 from app.security.deps import enforce_api_rate_limit, enforce_csrf
 
 api_router = APIRouter(
@@ -14,3 +16,6 @@ api_router.include_router(ceo.router)
 api_router.include_router(agents.router)
 api_router.include_router(tasks.router)
 api_router.include_router(approvals.router)
+api_router.include_router(prospects.router)
+api_router.include_router(clients.router)
+api_router.include_router(projects.router)
