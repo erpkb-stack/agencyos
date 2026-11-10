@@ -1,0 +1,12 @@
+# Runtime dependencies (Python 3.12+)
+fastapi==0.162.2
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.8
+alembic==1.20.1
+pydantic==2.14.3
+pydantic-settings==2.16.2
+python-multipart==0.0.33
+httpx==0.28.1
+# LLM provider SDKs (only imported inside app/providers/)
+anthropic==2.7.0
+openai==3.48.0

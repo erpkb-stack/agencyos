@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgencyOS</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <div class="shell" id="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+      <div class="brand">
+        <div class="brand-mark">OS</div>
+        <div>
+          <div class="brand-name">AgencyOS</div>
+          <div class="brand-sub">AI Agency Operating System</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot" id="sidebar-foot"></div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="btn btn-ghost btn-sm menu-toggle" id="menu-toggle" type="button" aria-label="Open navigation">☰</button>
+        <div class="topbar-title" id="page-title">Dashboard</div>
+        <div class="topbar-spacer"></div>
+        <span class="badge env-badge" id="env-badge"></span>
+        <div class="user-chip">
+          <div class="avatar" id="user-avatar">·</div>
+          <div class="user-meta">
+            <span class="name" id="user-name"></span>
+            <span class="role" id="user-role"></span>
+          </div>
+          <button class="btn btn-sm" id="logout" type="button">Sign out</button>
+        </div>
+      </header>
+      <main class="content" id="view" tabindex="-1">
+        <div class="state"><div class="spinner"></div>Loading…</div>
+      </main>
+    </div>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="/assets/vendor/chart.umd.min.js"></script>
+  <script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>
