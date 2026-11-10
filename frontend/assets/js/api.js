@@ -51,6 +51,10 @@ export async function api(path, { method = "GET", body, redirectOn401 = true } =
   }
   if (!response.ok) {
     const err = data?.error ?? {};
+    // REQUIRE_2FA_FOR_ADMINS: send the user to Settings, where the setup card is.
+    if (err.code === "mfa_setup_required" && !window.location.hash.startsWith("#/settings")) {
+      window.location.hash = "#/settings";
+    }
     throw new ApiError(
       response.status,
       err.code ?? "error",

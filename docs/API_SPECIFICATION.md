@@ -251,3 +251,22 @@ database constraint conflicts return 409; `/docs` and `/openapi.json` are disabl
 
 `GET /prospects` items and `GET /prospects/{id}` now include `website_check` (summary / latest check).
 `POST /prospects/{id}/research` includes the latest website facts in the agent's context.
+
+## Phase 9 endpoints (implemented)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/auth/login` | Now returns `{mfa_required: true, mfa_token}` (no session) when the user has 2FA, else `{mfa_required: false, user, csrf_token}` |
+| POST | `/auth/login/2fa` | `{mfa_token, code?, recovery_code?}` → session (`{user, csrf_token}`); 401 wrong/expired, 429 throttled |
+| GET | `/auth/2fa` | `{enabled, enabled_at, recovery_codes_left, required}` |
+| POST | `/auth/2fa/setup` | Start enrolment → `{secret, otpauth_uri, qr_svg}` (not active until enabled) |
+| POST | `/auth/2fa/enable` | `{code}` → `{recovery_codes[10]}` (shown once); signs out other sessions |
+| POST | `/auth/2fa/disable` | `{password, code? \| recovery_code?}` → 204 (refused when the policy requires 2FA) |
+| POST | `/auth/2fa/recovery-codes` | `{code}` → new `{recovery_codes}`; old ones stop working |
+| GET | `/auth/sessions` | `{items[]: id, created_at, last_seen_at, ip_address, user_agent, current}` |
+| DELETE | `/auth/sessions/{id}` | Sign out another session (400 for the current one; use logout) |
+| POST | `/auth/sessions/revoke-others` | → `{revoked}` |
+
+With `REQUIRE_2FA_FOR_ADMINS=true`, a Founder/Admin without 2FA gets 403 `mfa_setup_required` on
+every route except `/auth/me`, `/auth/logout`, `/auth/2fa*`, `/auth/change-password`,
+`/auth/sessions*` and `/settings/system`. `UserOut` includes `totp_enabled`.

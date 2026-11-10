@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, IdMixin, TimestampMixin, str_enum
@@ -20,6 +20,12 @@ class User(IdMixin, TimestampMixin, Base):
     role: Mapped[UserRole] = mapped_column(str_enum(UserRole, "user_role"), default=UserRole.STAFF)
     is_active: Mapped[bool] = mapped_column(default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(default=None)
+    # Two-factor authentication (Phase 9). The TOTP secret is stored encrypted; recovery codes hashed.
+    totp_secret: Mapped[str | None] = mapped_column(Text, default=None)
+    totp_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(default=None)
+    totp_last_step: Mapped[int | None] = mapped_column(default=None)
+    recovery_codes: Mapped[list[Any] | None] = mapped_column(default=None)
 
     sessions: Mapped[list[UserSession]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

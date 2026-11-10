@@ -4,6 +4,7 @@
     python -m app.cli create-user --email you@example.com --name "Your Name" --role FOUNDER
     python -m app.cli reset-password --email you@example.com
     python -m app.cli set-active --email someone@example.com --inactive
+    python -m app.cli reset-2fa --email someone@example.com
     python -m app.cli backup-db [--dest DIR] [--keep 14]
     python -m app.cli check-config
     python -m app.cli worker
@@ -79,6 +80,17 @@ def reset_password(email: str, password_stdin: bool) -> int:
                 print(f"  - {detail}", file=sys.stderr)
             return 1
     print(f"Password reset for {user.email}. All of their sessions were signed out.")
+    return 0
+
+
+def reset_2fa(email: str) -> int:
+    with SessionLocal() as db:
+        try:
+            user = auth_service.reset_mfa(db, email)
+        except AppError as exc:
+            print(f"Error: {exc.message}", file=sys.stderr)
+            return 1
+    print(f"Two-factor authentication removed for {user.email}; they were signed out and can set it up again.")
     return 0
 
 
@@ -188,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("reset-password", help="Set a new password for a user and sign them out everywhere")
     rp.add_argument("--email", required=True)
     rp.add_argument("--password-stdin", action="store_true", help="Read password from stdin")
+    r2 = sub.add_parser("reset-2fa", help="Remove two-factor authentication for a locked-out user")
+    r2.add_argument("--email", required=True)
     sa = sub.add_parser("set-active", help="Activate or deactivate a user")
     sa.add_argument("--email", required=True)
     group = sa.add_mutually_exclusive_group(required=True)
@@ -205,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "reset-password":
         return reset_password(args.email, args.password_stdin)
+    if args.command == "reset-2fa":
+        return reset_2fa(args.email)
     if args.command == "set-active":
         return set_active(args.email, args.active)
     if args.command == "backup-db":

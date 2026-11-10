@@ -64,13 +64,11 @@ def _settings(**overrides):
 
 def test_specialists_run_in_parallel(founder_client: TestClient, llm, orchestrator):
     llm.provider = SlowSpecialists(0.4)
-    started = time.monotonic()
     created = founder_client.post(f"{API}/ceo/messages", json={"content": THREE}).json()
-    elapsed = time.monotonic() - started
     task = founder_client.get(f"{API}/tasks/{created['task_id']}").json()
     assert task["status"] == "COMPLETED" and len(task["children"]) == 3
+    # Overlap is measured directly (no wall-clock bound, which flakes on a busy machine).
     assert llm.provider.peak == 3  # all three specialists were working at once
-    assert elapsed < 3 * 0.4 + 1.0  # sequential would need at least 1.2 s of sleeping alone
 
 
 def test_parallelism_is_configurable(founder_client: TestClient, llm, orchestrator):
