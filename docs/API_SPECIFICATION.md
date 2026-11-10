@@ -270,3 +270,19 @@ database constraint conflicts return 409; `/docs` and `/openapi.json` are disabl
 With `REQUIRE_2FA_FOR_ADMINS=true`, a Founder/Admin without 2FA gets 403 `mfa_setup_required` on
 every route except `/auth/me`, `/auth/logout`, `/auth/2fa*`, `/auth/change-password`,
 `/auth/sessions*` and `/settings/system`. `UserOut` includes `totp_enabled`.
+
+## Phase 10 endpoints (implemented)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/campaigns/{id}/request-approval` | Email campaigns now also render and freeze every message (`email_messages`); details state emails, recipients, steps and exclusions |
+| GET | `/campaigns/{id}/outbox` | `?status=&page=&page_size=` → `{items[]: id, company_name, to_email, step, delay_days, subject, body_text, status, send_after, sent_at, attempts, error; counts}` |
+| POST | `/campaigns/{id}/status` | `ACTIVE` starts sending approved emails; `PAUSED` holds them; `CANCELLED`/`COMPLETED` cancel unsent ones |
+| GET | `/emails/sending` | `{transport, enabled, configured, smtp_host, smtp_port, smtp_security, from, from_name, daily_limit, sent_last_24h, scheduled, interval_seconds, redirect_to, unsubscribe_mode (link\|reply), last_run_at, last_sent_at, last_error}` (no secrets) |
+| POST | `/emails/sending/test` | Send a test email to the signed-in user's own address → `{sent_to, message_id}`; 400 when sending is off |
+| POST | `/emails/templates/{id}/test-send` | `{prospect_id?}` → the email personalised for that prospect, sent only to the signed-in user, subject `[Test] …` |
+| POST | `/unsubscribe?e=&t=` | Also accepts RFC 8058 one-click POSTs (e/t in the query string) |
+
+Campaign detail includes `outbox` (counts by status) for email campaigns. Message statuses:
+`PENDING_APPROVAL → SCHEDULED → SENDING → SENT | FAILED`, or `SKIPPED` / `CANCELLED`.
+`/settings/system` `external_sending_enabled` is true when SMTP sending is configured.

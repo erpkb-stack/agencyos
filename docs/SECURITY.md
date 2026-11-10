@@ -78,12 +78,31 @@ Residual risk: DNS rebinding between the check and the connection.
 - Users can list their sessions (device, IP, last active) and sign out any other one.
 - The development-only demo login does not ask for a code; it is refused outside development.
 
+## Phase 10: email sending
+
+- Off unless `EMAIL_TRANSPORT=smtp`. Only messages created by a person's approval request and
+  approved by a Founder/Admin can be sent, and only while the campaign is started (ACTIVE).
+  Agents have no path to create, approve or start a send.
+- Messages are rendered and frozen at approval-request time; editing an approved email cancels
+  its approved copies. Emails with unfilled merge fields are never sent.
+- Right before each send: do-not-contact list, deleted prospect, changed address, and (for
+  follow-ups) the prospect's stage are re-checked. Hard SMTP rejections add the address to
+  Do-not-contact as BOUNCED.
+- Rate limits: `EMAIL_DAILY_LIMIT` per rolling 24 hours, `EMAIL_SEND_INTERVAL_SECONDS` between
+  emails, `EMAIL_MAX_RECIPIENTS` per campaign. `EMAIL_REDIRECT_TO` for dry runs.
+- SMTP password is read from `.env` only, never returned by the API or logged; TLS is verified
+  (`starttls`/`ssl`); `SMTP_SECURITY=none` with a password raises a configuration warning.
+- `List-Unsubscribe` + RFC 8058 one-click with a public URL; otherwise reply-to-unsubscribe.
+- Tests use a fake transport and a patched `smtplib`; no live mailbox is used.
+- Not handled: reading bounce/complaint emails or provider webhooks, open/click tracking (not
+  collected), DKIM/SPF/DMARC (configure these at your provider and DNS).
+
 ## Known limitations / accepted risks
 
 - Rate limiting and the background task runner are in-memory and per process (run one process).
 - Two-factor authentication is optional unless `REQUIRE_2FA_FOR_ADMINS=true`; there are no
   hardware security keys (WebAuthn) yet.
-- No automatic account lockout notification by email (the app does not send email).
+- No automatic account lockout notification by email (email is used only for approved campaigns).
 - SQLite files and backups are not encrypted at rest; use disk encryption and encrypted off-site
   storage for backups.
 - Session tokens are bearer tokens; anyone with access to a signed-in browser has that session.

@@ -12,6 +12,7 @@ from app.orchestrator.runner import InlineRunner, NotifyOnlyRunner, QueueWorker,
 from app.providers import default_provider_factory
 
 _runner: TaskRunner | None = None
+_email_sender = None
 _lock = Lock()
 
 
@@ -29,9 +30,20 @@ def get_task_runner() -> TaskRunner:
         return _runner
 
 
+def build_email_sender():
+    from app.services.email_sending import EmailSender
+
+    return EmailSender(SessionLocal, get_settings())
+
+
 def start_runner() -> None:
-    """Start the in-process worker at boot so queued work resumes without waiting for a request."""
+    """Start the in-process worker at boot so queued work resumes without waiting for a request.
+    The email sender runs wherever the worker runs (here, or in `python -m app.cli worker`)."""
+    global _email_sender
     get_task_runner()
+    with _lock:
+        if get_settings().run_worker_in_process and _email_sender is None:
+            _email_sender = build_email_sender().start()
 
 
 def shutdown_runner() -> None:
@@ -40,7 +52,11 @@ def shutdown_runner() -> None:
         if isinstance(_runner, QueueWorker):
             _runner.shutdown()
         _runner = None
+        global _email_sender
+        if _email_sender is not None:
+            _email_sender.shutdown()
+            _email_sender = None
 
 
-__all__ = ["Orchestrator", "InlineRunner", "QueueWorker", "TaskRunner", "get_task_runner", "start_runner",
+__all__ = ["build_email_sender", "Orchestrator", "InlineRunner", "QueueWorker", "TaskRunner", "get_task_runner", "start_runner",
            "shutdown_runner"]

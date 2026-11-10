@@ -67,6 +67,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif path.startswith("/assets/") or path in ("/", "/login"):
+            # Revalidate with the ETag on every load (a cheap 304 when unchanged) so an upgrade is
+            # picked up immediately instead of the browser running stale scripts.
+            response.headers.setdefault("Cache-Control", "no-cache")
 
         if path.startswith("/api/"):
             logger.info(

@@ -12,9 +12,11 @@ from app.models.identity import User
 from app.orchestrator import TaskRunner, get_task_runner
 from app.schemas.marketing import (
     AudienceFilter, EmailCheckIn, EmailCreate, EmailGenerateIn, EmailUpdate, RecipientsCheckIn, SuppressionIn,
+    SendTestIn,
 )
 from app.security.deps import get_current_user, require_admin, require_writer
-from app.services import campaign_service, drafting, email_service
+from app.integrations.email_transport import EmailTransport, get_email_transport
+from app.services import campaign_service, drafting, email_sending, email_service
 from app.utils.errors import AppError
 
 router = APIRouter(prefix="/emails", tags=["email"])
@@ -153,4 +155,32 @@ def sender_settings(settings: Settings = Depends(get_settings), _: User = Depend
     return {"agency_name": settings.agency_name, "agency_address": settings.agency_address,
             "sender_name": settings.sender_name, "sender_email": settings.sender_email,
             "configured": bool(settings.agency_name and settings.agency_address and settings.sender_name),
-            "sending_enabled": False}
+            "sending_enabled": settings.email_transport == "smtp" and bool(settings.smtp_host and settings.sender_email)}
+
+
+@router.get("/sending")
+def sending_status(db: Session = Depends(get_db), settings: Settings = Depends(get_settings),
+                   _: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Whether and how AgencyOS sends email (no secrets)."""
+    return jsonable_encoder(email_sending.status(db, settings))
+
+
+@router.post("/sending/test")
+def send_test_email(db: Session = Depends(get_db), settings: Settings = Depends(get_settings),
+                    transport: EmailTransport | None = Depends(get_email_transport),
+                    user: User = Depends(require_writer)) -> dict[str, Any]:
+    """Send a short test email to your own address to check the SMTP settings."""
+    result = email_sending.send_test(db, settings, user, transport)
+    db.commit()
+    return result
+
+
+@router.post("/templates/{template_id}/test-send")
+def send_template_test(template_id: int, body: SendTestIn, db: Session = Depends(get_db),
+                       settings: Settings = Depends(get_settings),
+                       transport: EmailTransport | None = Depends(get_email_transport),
+                       user: User = Depends(require_writer)) -> dict[str, Any]:
+    """Send this email, personalised for a prospect if chosen, to your own address only."""
+    result = email_sending.send_test(db, settings, user, transport, email_service.get(db, template_id), body.prospect_id)
+    db.commit()
+    return result

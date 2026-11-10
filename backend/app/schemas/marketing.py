@@ -198,3 +198,6 @@ class FunnelPublishedIn(_In):
     def _lp(cls, v: str) -> str:
         return normalize_website(v)  # type: ignore[return-value]
 
+
+class SendTestIn(_In):
+    prospect_id: int | None = None

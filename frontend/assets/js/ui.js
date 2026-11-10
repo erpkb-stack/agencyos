@@ -52,12 +52,12 @@ export const fmt = {
 
 const STATUS_TONES = {
   success: ["COMPLETED", "SUCCEEDED", "APPROVED", "ACTIVE", "WON", "PAID", "DONE", "DELIVERED"],
-  warning: ["PENDING", "INACTIVE", "AWAITING_APPROVAL", "AWAITING_CLIENT", "REVIEW", "PAUSED", "PARTIALLY_PAID"],
+  warning: ["PENDING", "PENDING_APPROVAL", "INACTIVE", "AWAITING_APPROVAL", "AWAITING_CLIENT", "REVIEW", "PAUSED", "PARTIALLY_PAID"],
   danger: ["FAILED", "REJECTED", "LOST", "CANCELLED", "EXPIRED", "VOID"],
-  info: ["RUNNING", "PLANNING", "QUEUED", "IN_PROGRESS", "ASSIGNED", "SENT"],
+  info: ["RUNNING", "PLANNING", "QUEUED", "SCHEDULED", "SENDING", "IN_PROGRESS", "ASSIGNED", "SENT"],
 };
 
-const LIVE = new Set(["PENDING", "QUEUED", "ASSIGNED", "RUNNING", "PLANNING"]);
+const LIVE = new Set(["PENDING", "SENDING", "QUEUED", "ASSIGNED", "RUNNING", "PLANNING"]);
 
 export function statusBadge(status) {
   const tone = Object.entries(STATUS_TONES).find(([, list]) => list.includes(status))?.[0];

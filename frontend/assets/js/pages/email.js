@@ -10,7 +10,7 @@ export async function renderEmail(ctx) {
   const tab = TABS.some(([k]) => k === ctx.params[0]) ? ctx.params[0] : "templates";
   const content = el("div", {}, loadingState());
   view.replaceChildren(
-    el("div", { class: "page-head" }, el("div", {}, el("h1", {}, "Email Marketing"), el("p", { class: "muted" }, "Drafts only. AgencyOS never sends email; approved campaigns are sent from your own email tool."))),
+    el("div", { class: "page-head" }, el("div", {}, el("h1", {}, "Email Marketing"), el("p", { class: "muted" }, "Write and check email templates. AgencyOS sends email only as part of an approved campaign that you start."))),
     el("div", { class: "tabs", role: "tablist" }, TABS.map(([k, l]) => el("a", { class: `tab${k === tab ? " active" : ""}`, href: `#/email/${k}`, role: "tab", "aria-selected": String(k === tab) }, l))),
     content,
   );

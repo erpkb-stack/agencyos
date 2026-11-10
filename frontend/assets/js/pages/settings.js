@@ -141,6 +141,54 @@ function sessionsCard() {
   return card;
 }
 
+// -- Email sending (read-only: configured in .env) ----------------------------------------------
+
+function emailCard() {
+  const body = el("div", { class: "card-body" }, loadingState());
+  const card = el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, "Email sending")), body);
+  (async () => {
+    let s;
+    try {
+      s = await api("/emails/sending");
+    } catch (err) {
+      body.replaceChildren(el("p", { class: "form-error" }, err.message));
+      return;
+    }
+    const test = el("button", { class: "btn", type: "button", onclick: async () => {
+      test.disabled = true;
+      try {
+        const r = await api("/emails/sending/test", { method: "POST" });
+        toast(`Test email sent to ${r.sent_to}. Check that inbox (and spam).`, "success");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        test.disabled = false;
+      }
+    } }, "Send a test email to me");
+    const status = s.enabled ? el("span", { class: "badge badge-success" }, "On")
+      : el("span", { class: "badge" }, s.transport === "smtp" ? "Not configured" : "Off");
+    body.replaceChildren(
+      el("p", {}, status, s.enabled ? " Approved campaigns are sent once you click Start sending." : " Nothing is sent. Campaigns can still be drafted and approved."),
+      kv([
+        ["Server", s.smtp_host ? `${s.smtp_host}:${s.smtp_port} (${s.smtp_security})` : "—"],
+        ["From", s.from ? `${s.from_name ? `${s.from_name} ` : ""}<${s.from}>` : "—"],
+        ["Pace", `1 email every ${s.interval_seconds} s, at most ${s.daily_limit} per 24 hours`],
+        ["Sent in the last 24 hours", String(s.sent_last_24h)],
+        ["Waiting to send", String(s.scheduled)],
+        ["Unsubscribe", s.unsubscribe_mode === "link"
+          ? "One-click link (processed automatically)"
+          : "By reply: PUBLIC_BASE_URL is not reachable from the internet, so emails ask people to reply \"Unsubscribe\". Add them under Email → Do-not-contact within 10 business days."],
+        ["Last sent", s.last_sent_at ? fmt.datetime(s.last_sent_at) : "—"],
+      ]),
+      s.redirect_to ? el("p", { class: "notice mt-16" }, `Test mode (EMAIL_REDIRECT_TO): every email goes to ${s.redirect_to} instead of the prospect.`) : null,
+      s.last_error ? el("p", { class: "notice notice-warning mt-16" }, `Last problem: ${s.last_error}`) : null,
+      s.enabled ? el("div", { class: "row mt-16" }, test) : el("p", { class: "field-hint mt-16" },
+        "To turn it on, set EMAIL_TRANSPORT=smtp, SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD and SENDER_EMAIL in .env, then restart. The password stays on the server."),
+    );
+  })();
+  return card;
+}
+
 function agentWorkText(o) {
   const where = o.worker_in_process ? "in the web process" : "in a separate worker process";
   return `${o.parallel_agents} agents in parallel per request · ${o.task_workers} requests at a time · ${where}`;
@@ -281,7 +329,7 @@ export function renderSettings({ view, user, system }) {
         ["Anthropic key", configured(system.llm.anthropic_configured)],
         ["Anthropic model", system.llm.anthropic_model],
         ["Demo login", system.demo_login_enabled ? "Enabled (development)" : "Disabled"],
-        ["External sending", system.external_sending_enabled ? "Enabled" : "Disabled — drafts only"],
+        ["Email sending", system.external_sending_enabled ? "On (approved campaigns only)" : "Off"],
         ["Session length", `${system.session_ttl_hours} hours`],
         ["Agent work", agentWorkText(system.orchestrator)],
         ["Queued tasks", String(system.orchestrator.queued)],
@@ -299,7 +347,7 @@ export function renderSettings({ view, user, system }) {
     el("div", { class: "page-head" }, el("div", {}, el("h1", {}, "Settings"), el("p", { class: "muted" }, "Your account, team and system configuration."))),
     el("div", { class: "grid two-col mb-16" }, profile, passwordCard()),
     el("div", { class: "grid two-col mb-16" }, securityCard(), sessionsCard()),
-    el("div", { class: "grid mb-16" }, sys),
+    el("div", { class: "grid two-col mb-16" }, emailCard(), sys),
     ...(isAdmin ? [usersCard(user)] : []),
   );
 }

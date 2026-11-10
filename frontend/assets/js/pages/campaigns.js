@@ -72,7 +72,7 @@ export async function renderCampaigns(ctx) {
   type.addEventListener("change", () => { state.type = type.value; state.page = 1; load(); });
   view.replaceChildren(
     el("div", { class: "page-head" },
-      el("div", {}, el("h1", {}, "Campaigns"), el("p", { class: "muted" }, "Plan and draft campaigns. Nothing is sent or launched from AgencyOS; launches need approval and happen in your own tools.")),
+      el("div", {}, el("h1", {}, "Campaigns"), el("p", { class: "muted" }, "Plan and draft campaigns. Approved email campaigns are sent by AgencyOS once you start them; ads launch in your own tools.")),
       canWrite(user) ? el("button", { class: "btn btn-primary", type: "button", onclick: () => openCampaignForm(null, (c) => (window.location.hash = `#/campaigns/${c.id}`)) }, "New campaign") : null),
     el("section", { class: "card" }, el("div", { class: "card-body" }, el("div", { class: "toolbar" }, search, status, type)),
       el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["Campaign", "Type", "Client", "Status", "Emails", "Budget"].map((h) => el("th", {}, h)))), tbody)), pagerHost),
@@ -103,6 +103,61 @@ function audienceCard(c, writer, reload) {
       result));
 }
 
+const MSG_STATUSES = ["PENDING_APPROVAL", "SCHEDULED", "SENDING", "SENT", "FAILED", "SKIPPED", "CANCELLED"];
+const MSG_LABELS = { PENDING_APPROVAL: "Awaiting approval", SCHEDULED: "Scheduled", SENDING: "Sending", SENT: "Sent", FAILED: "Failed", SKIPPED: "Skipped", CANCELLED: "Cancelled" };
+
+// Every rendered email, exactly as approved; status updates as the sender works through them.
+function outboxCard(c, sending) {
+  const state = { status: "", page: 1 };
+  const size = 25;
+  const counts = c.outbox;
+  const filter = el("select", { class: "input", "aria-label": "Email status" }, el("option", { value: "" }, "All emails"),
+    MSG_STATUSES.filter((s) => counts[s]).map((s) => el("option", { value: s }, `${MSG_LABELS[s]} (${counts[s]})`)));
+  const tbody = el("tbody");
+  const pagerHost = el("div");
+  const when = (m) => m.sent_at ? `Sent ${fmt.datetime(m.sent_at)}` : m.status === "SCHEDULED"
+    ? (m.send_after ? `Due ${fmt.datetime(m.send_after)}` : m.step > 1 ? `${m.delay_days} day(s) after email ${m.step - 1}` : "When sending starts") : "—";
+  async function load() {
+    const q = new URLSearchParams({ page: String(state.page), page_size: String(size) });
+    if (state.status) q.set("status", state.status);
+    try {
+      const data = await api(`/campaigns/${c.id}/outbox?${q}`);
+      tbody.replaceChildren(...(data.items.length ? data.items.map((m) => el("tr", {},
+        el("td", { class: "wrap" }, el("strong", {}, m.company_name ?? "—"), el("div", { class: "small faint" }, m.to_email)),
+        el("td", {}, String(m.step)),
+        el("td", { class: "wrap" }, m.subject, m.error ? el("div", { class: "small faint" }, m.error) : null),
+        el("td", {}, statusBadge(m.status)),
+        el("td", { class: "small" }, when(m)),
+        el("td", {}, el("button", { class: "btn btn-sm", type: "button", onclick: () => showText(`To ${m.to_email}: ${m.subject}`, m.body_text) }, "Read"))))
+        : [el("tr", {}, el("td", { colspan: "6", class: "empty-inline" }, "No emails with this status."))]));
+      pagerHost.replaceChildren(pager(state, data.total, size, load));
+    } catch (err) {
+      tbody.replaceChildren(el("tr", {}, el("td", { colspan: "6" }, err.message)));
+    }
+  }
+  filter.addEventListener("change", () => { state.status = filter.value; state.page = 1; load(); });
+  load();
+  const sent = counts.SENT ?? 0;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) - (counts.CANCELLED ?? 0);
+  let notice = null;
+  if (sending && !sending.enabled && (counts.SCHEDULED || counts.PENDING_APPROVAL)) {
+    notice = el("p", { class: "notice notice-warning" }, "Email sending is turned off, so nothing will go out yet. Set it up in ", el("a", { href: "#/settings" }, "Settings → Email sending"), ".");
+  } else if (sending?.last_error && counts.SCHEDULED && c.status === "ACTIVE") {
+    notice = el("p", { class: "notice notice-warning" }, `Sending is held up: ${sending.last_error}`);
+  } else if (sending?.redirect_to && counts.SCHEDULED) {
+    notice = el("p", { class: "notice" }, `Test mode: every email goes to ${sending.redirect_to} instead of the prospect.`);
+  }
+  return el("section", { class: "card section-gap" },
+    el("div", { class: "card-head" }, el("h2", {}, `Outbox · ${sent} of ${total} sent`), filter),
+    el("div", { class: "card-body" },
+      notice,
+      el("p", { class: "small faint" }, c.status === "AWAITING_APPROVAL"
+        ? "These are the exact emails the approver is deciding on."
+        : "Exactly the emails that were approved. Follow-ups stop if the prospect unsubscribes or replies (stage moves to Responded or beyond).")),
+    el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["Recipient", "Step", "Subject", "Status", "When", ""].map((h) => el("th", {}, h)))), tbody)),
+    pagerHost);
+}
+
 async function renderCampaign(ctx, id) {
   const { view, user } = ctx;
   let stop = null;
@@ -114,6 +169,8 @@ async function renderCampaign(ctx, id) {
 
   async function draw() {
     const c = await api(`/campaigns/${id}`);
+    const sending = c.is_email ? await api("/emails/sending").catch(() => null) : null;
+    const queued = (c.outbox?.SCHEDULED ?? 0) + (c.outbox?.SENDING ?? 0);
     const reload = () => draw();
     const act = (fn, ok) => async () => { try { await fn(); if (ok) toast(ok, "success"); reload(); } catch (e) { toast(e.message, "error"); } };
     // Starting AI work: refresh, then keep polling until the agent finishes.
@@ -122,10 +179,22 @@ async function renderCampaign(ctx, id) {
     const head = [];
     if (writer && ["DRAFT", "APPROVED", "ACTIVE", "PAUSED"].includes(c.status)) head.push(el("button", { class: "btn", type: "button", onclick: () => openCampaignForm(c, reload) }, c.status === "DRAFT" ? "Edit" : "Change budget"));
     if (writer && c.status === "DRAFT") head.push(el("button", { class: "btn btn-primary", type: "button", onclick: () => requestApproval(c, reload) }, "Request approval"));
-    if (writer) for (const s of c.allowed_status_changes) head.push(el("button", { class: "btn", type: "button", onclick: async () => {
-      const msg = s === "ACTIVE" ? "AgencyOS does not send emails or launch ads. Only mark the campaign as running once you have launched it in your own email or ads tool." : `Mark this campaign as ${fmt.label(s).toLowerCase()}?`;
-      if (await confirmDialog({ title: STATUS_LABELS[s], message: msg, confirmLabel: STATUS_LABELS[s] })) act(() => api(`/campaigns/${id}/status`, { method: "POST", body: { status: s } }), "Status updated")();
-    } }, STATUS_LABELS[s]));
+    const sends = c.is_email && queued > 0;
+    const labels = sends ? { ...STATUS_LABELS, ACTIVE: c.status === "PAUSED" ? "Resume sending" : "Start sending", PAUSED: "Pause sending", CANCELLED: "Cancel unsent emails" } : STATUS_LABELS;
+    if (writer) for (const s of c.allowed_status_changes) head.push(el("button", { class: s === "ACTIVE" && sends ? "btn btn-primary" : "btn", type: "button", onclick: async () => {
+      let msg = `Mark this campaign as ${fmt.label(s).toLowerCase()}?`;
+      if (s === "ACTIVE" && sends) {
+        msg = sending?.enabled
+          ? `${queued} approved email(s) will be sent from ${sending.from_name ? `${sending.from_name} <${sending.from}>` : sending.from}, one every ${sending.interval_seconds} seconds and at most ${sending.daily_limit} a day. Follow-ups go out on their scheduled day. You can pause at any time.`
+          : "Email sending is turned off (EMAIL_TRANSPORT in .env), so the campaign will start but nothing is sent until it is set up. See Settings → Email sending.";
+        if (sending?.redirect_to) msg += ` Test mode: every email goes to ${sending.redirect_to} instead.`;
+      } else if (s === "ACTIVE") {
+        msg = "AgencyOS does not launch ads. Only mark the campaign as running once you have launched it in your own ads tool.";
+      } else if (s === "CANCELLED" && sends) {
+        msg = `${queued} approved email(s) have not been sent yet; they will be cancelled. Sent emails are not affected.`;
+      }
+      if (await confirmDialog({ title: labels[s], message: msg, confirmLabel: labels[s] })) act(() => api(`/campaigns/${id}/status`, { method: "POST", body: { status: s } }), s === "ACTIVE" && sends ? "Sending started" : "Status updated")();
+    } }, labels[s]));
     if (writer && !["ACTIVE", "AWAITING_APPROVAL"].includes(c.status)) head.push(el("button", { class: "btn btn-ghost", type: "button", onclick: async () => {
       if (await confirmDialog({ title: "Delete campaign?", message: "The campaign and its drafts are hidden. History stays in the audit log.", confirmLabel: "Delete" })) {
         try { await api(`/campaigns/${id}`, { method: "DELETE" }); window.location.hash = "#/campaigns"; } catch (e) { toast(e.message, "error"); }
@@ -142,6 +211,7 @@ async function renderCampaign(ctx, id) {
       el("td", {}, statusBadge(e.status)),
       el("td", {}, el("div", { class: "row" },
         el("button", { class: "btn btn-sm", type: "button", onclick: () => showText(e.subject, e.body_text) }, "View"),
+        writer ? el("button", { class: "btn btn-sm", type: "button", title: "Send this email to your own address", onclick: () => sendTest(e) }, "Test to me") : null,
         writer && ["DRAFT", "APPROVED"].includes(c.status) ? el("button", { class: "btn btn-sm", type: "button", onclick: () => openEmailEditor({ title: "Edit email", values: e, extraDefs: [{ name: "delay_days", label: "Send on day", type: "number", min: "0" }], save: async (data, { close }) => { await api(`/emails/templates/${e.id}`, { method: "PATCH", body: data }); close(); reload(); } }) }, "Edit") : null,
         writer && ["DRAFT", "APPROVED"].includes(c.status) ? el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: async () => { if (await confirmDialog({ title: "Delete email?", message: e.subject, confirmLabel: "Delete" })) act(() => api(`/emails/templates/${e.id}`, { method: "DELETE" }))(); } }, "Delete") : null))));
 
@@ -182,6 +252,7 @@ async function renderCampaign(ctx, id) {
       c.is_email ? el("section", { class: "card section-gap" }, el("div", { class: "card-head" }, el("h2", {}, `Email sequence (${c.emails.length})`),
         writer && c.status === "DRAFT" ? el("button", { class: "btn btn-sm", type: "button", onclick: () => openEmailEditor({ title: "Add email", values: { body_text: "Hi {{first_name}},\n\n\n\n—\n{{sender_name}}, {{agency_name}}\n{{agency_address}}\nUnsubscribe: {{unsubscribe_link}}" }, extraDefs: [{ name: "delay_days", label: "Send on day", type: "number", min: "0" }], save: async (data, { close }) => { await api("/emails/templates", { method: "POST", body: { ...data, campaign_id: c.id } }); close(); reload(); } }) }, "Add email") : null),
         emailRows.length ? el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["#", "When", "Subject", "Compliance", "Status", ""].map((h) => el("th", {}, h)))), el("tbody", {}, emailRows))) : el("div", { class: "card-body empty-inline" }, "No emails yet. Draft a sequence with AI or add one.")) : el("span"),
+      c.outbox && Object.keys(c.outbox).length ? outboxCard(c, sending) : el("span"),
       c.drafts.length ? el("section", { class: "card section-gap" }, el("div", { class: "card-head" }, el("h2", {}, "Saved drafts")),
         el("div", { class: "card-body" }, c.drafts.map((d, i) => el("div", { class: "deliverable" }, el("div", { class: "deliverable-head" }, el("strong", {}, d.title), el("div", { class: "row" }, el("span", { class: "badge" }, fmt.label(d.kind)), writer ? el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: act(() => api(`/campaigns/${id}/drafts/${i}`, { method: "DELETE" })) }, "Remove") : null)), el("div", { class: "deliverable-body pre" }, d.content))))) : el("span"),
       metricsCard,
@@ -206,7 +277,7 @@ async function renderCampaign(ctx, id) {
         { name: "notes", label: "Notes for the approver", type: "textarea" },
       ] : [{ name: "notes", label: "Notes for the approver", type: "textarea" }],
       intro: el("div", { class: "mb-16" },
-        el("p", { class: "notice" }, isEmail ? "Approval allows the emails to be sent from your own email tool. AgencyOS does not send them." : "Approval allows the campaign to be launched in your ads tool. AgencyOS does not launch it."),
+        el("p", { class: "notice" }, isEmail ? "Each recipient's emails are written out now, with their details filled in. The approver can read every one in the Outbox. After approval, AgencyOS sends exactly those emails once you click Start sending." : "Approval allows the campaign to be launched in your ads tool. AgencyOS does not launch it."),
         isEmail ? el("label", { class: "check mt-8" }, el("input", { type: "checkbox", id: "confirm-compliance" }), "Every email identifies the sender, includes our postal address and an unsubscribe link, and suppressed addresses will be excluded.") : null),
       submitLabel: "Send for approval",
       submit: async (data, { close }) => {
@@ -215,6 +286,22 @@ async function renderCampaign(ctx, id) {
         close();
         toast("Sent for approval", "success");
         reload();
+      },
+    });
+  }
+
+  async function sendTest(e) {
+    const { items } = await api("/prospects?page_size=100").catch(() => ({ items: [] }));
+    formDialog({
+      title: "Send a test to yourself",
+      defs: [{ name: "prospect_id", label: "Fill in details as if sent to", type: "select", numeric: true, full: true,
+        options: [["", "No prospect (merge fields show [missing: …])"], ...items.filter((p) => p.email).map((p) => [p.id, `${p.company_name} (${p.email})`])] }],
+      intro: el("p", { class: "small muted mb-16" }, `"${e.subject}" goes only to your own address (${user.email}), marked [Test]. No prospect receives it.`),
+      submitLabel: "Send test",
+      submit: async (data, { close }) => {
+        const r = await api(`/emails/templates/${e.id}/test-send`, { method: "POST", body: { prospect_id: data.prospect_id ?? null } });
+        close();
+        toast(`Test sent to ${r.sent_to}`, "success");
       },
     });
   }

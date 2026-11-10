@@ -91,6 +91,20 @@ class Settings(BaseSettings):
     sender_email: str = ""
     public_base_url: str = "http://localhost:8000"
 
+    # Email sending (Phase 10). Nothing is sent unless EMAIL_TRANSPORT=smtp AND a campaign was approved
+    # and started. EMAIL_REDIRECT_TO sends every email to that one address instead (for testing).
+    email_transport: str = Field(default="disabled", pattern="^(disabled|smtp)$")
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str = ""
+    smtp_password: str = Field(default="", repr=False)
+    smtp_security: str = Field(default="starttls", pattern="^(starttls|ssl|none)$")
+    smtp_timeout_seconds: float = Field(default=20.0, ge=2, le=120)
+    email_daily_limit: int = Field(default=50, ge=1, le=10000)
+    email_send_interval_seconds: float = Field(default=20.0, ge=0, le=3600)
+    email_max_recipients: int = Field(default=500, ge=1, le=10000)
+    email_redirect_to: str = ""
+
     # Orchestrator limits (enforced in Python, not by the model)
     orchestrator_max_subtasks: int = Field(default=5, ge=1, le=10)
     orchestrator_max_depth: int = Field(default=2, ge=1, le=3)
@@ -176,6 +190,12 @@ class Settings(BaseSettings):
             warnings.append("LLM_PROVIDER=openai but OPENAI_API_KEY is not set; agent tasks will fail.")
         if provider == "anthropic" and not self.anthropic_api_key:
             warnings.append("LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set; agent tasks will fail.")
+        if self.email_transport == "smtp":
+            missing = [n for n, v in (("SMTP_HOST", self.smtp_host), ("SENDER_EMAIL", self.sender_email)) if not v]
+            if missing:
+                warnings.append(f"EMAIL_TRANSPORT=smtp but {', '.join(missing)} is not set; nothing can be sent.")
+            if self.smtp_security == "none" and self.smtp_username:
+                warnings.append("SMTP_SECURITY=none sends the SMTP password unencrypted; use starttls or ssl.")
         if not (self.agency_name and self.agency_address and self.sender_name):
             warnings.append("Agency identity (AGENCY_NAME, AGENCY_ADDRESS, SENDER_NAME) is incomplete; email drafts show [missing: …].")
         return warnings

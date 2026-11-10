@@ -116,8 +116,13 @@ Costs use list prices in `app/providers/pricing.py`; unknown models report no co
 - **Record-level approvals.** `approvals.payload.entity_type/entity_id` link an approval to a campaign
   or funnel; `app.approvals.settle()` calls the handler the owning service registered. Content is
   locked while awaiting approval, and edits after approval return the record to draft.
-- **No external execution.** "Active" and "Published" are set by a person after acting in an
-  external tool; the audit log records that AgencyOS did not send or publish anything.
+- **External execution is limited to approved email.** For ads and funnels, "Active" and
+  "Published" are set by a person after acting in an external tool. Email campaigns are the one
+  exception (Phase 10): `email_messages` holds every rendered email, frozen when approval is
+  requested, so exactly what the approver read is what gets sent. A background sender
+  (`app/services/email_sending.py`) sends due messages of ACTIVE campaigns over SMTP
+  (`app/integrations/email_transport.py`), claiming each row atomically and re-checking
+  suppression and the prospect's stage first. Agents cannot create or approve sends.
 - **Landing-page preview** is served with its own CSP (`default-src 'none'`, inline styles only,
   `form-action 'none'`) inside a sandboxed iframe; the middleware keeps route-set security headers.
 - **Unsubscribe** links carry `HMAC(SECRET_KEY, email)`, so the public page needs no login and

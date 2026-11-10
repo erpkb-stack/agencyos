@@ -142,6 +142,35 @@ Run from `backend/` with `../.venv/bin/python -m app.cli …` (or `docker compos
 | `worker` | Run the agent task queue in its own process (with `RUN_WORKER_IN_PROCESS=false`) |
 | `reset-2fa --email …` | Remove a user's authenticator (lost phone); signs them out everywhere |
 
+## Approved email sending (Phase 10)
+
+Email campaigns can now be sent by AgencyOS itself, over SMTP, but only through this path:
+
+1. **Request approval** on an email campaign. Every email for every recipient is written out now
+   with their details filled in. Recipients on the do-not-contact list, without an email address,
+   or whose email would still contain `[missing: …]` are left out and counted.
+2. A Founder/Admin reads them in the campaign's **Outbox** and approves or rejects.
+3. Someone clicks **Start sending**. Step 1 goes out, one email every
+   `EMAIL_SEND_INTERVAL_SECONDS` and at most `EMAIL_DAILY_LIMIT` per 24 hours. Each follow-up goes
+   out `delay_days` after the previous email to that person was actually sent.
+4. Right before each email, AgencyOS checks again: unsubscribed or bounced addresses are skipped,
+   and follow-ups stop once the prospect's stage is Responded or later. **Pause sending** holds
+   everything; **Cancel** drops what hasn't gone out. Editing an approved email cancels its
+   approved copies (it needs approval again).
+
+Set it up in `.env` (see `.env.example`): `EMAIL_TRANSPORT=smtp`, `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SENDER_EMAIL`. Then **Settings → Email sending →
+Send a test email to me**, and **Test to me** on any campaign email. `EMAIL_REDIRECT_TO` sends every
+campaign email to one address for a dry run.
+
+**Unsubscribes.** Each email has a `List-Unsubscribe` header. With a public `https://`
+`PUBLIC_BASE_URL`, the link and one-click unsubscribe (RFC 8058) are processed automatically. On
+`localhost` the link would not work for recipients, so emails ask people to reply "Unsubscribe" to
+`SENDER_EMAIL`, and you add them under Email → Do-not-contact (CAN-SPAM: within 10 business days).
+
+**Bounces.** An address the SMTP server rejects outright is added to the do-not-contact list.
+Bounces that arrive later as emails are not read by AgencyOS; add those by hand.
+
 ## Two-factor sign-in and devices (Phase 9)
 
 - **Settings → Two-factor authentication → Set up**: scan the QR code with any authenticator app
@@ -206,10 +235,11 @@ Run from `backend/` with `../.venv/bin/python -m app.cli …` (or `docker compos
   are written to the timeline. **Send to agent** hands a task to its assigned agent with the
   project as context; agents still only draft and propose.
 
-## Marketing (Phase 4): drafts only
+## Marketing (Phase 4)
 
-AgencyOS **never sends email, launches ads or hosts pages**. It drafts, checks and gets approval;
-you run the approved work in your own tools and record the outcome.
+AgencyOS **does not launch ads or host pages**. It drafts, checks and gets approval; you run the
+approved work in your own tools and record the outcome. Email is the exception since Phase 10:
+approved email campaigns can be sent from AgencyOS (see "Approved email sending").
 
 - **Campaigns** — create, let agents draft (strategy, email sequence, ad copy, audience ideas),
   import what you want, pick an audience from your prospects (suppressed addresses are always
