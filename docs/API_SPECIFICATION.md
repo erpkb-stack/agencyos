@@ -227,7 +227,14 @@ Money is a decimal string with two places. Period parameters `start`/`end` are I
 Report keys: `daily_activity`, `weekly_ceo`, `monthly_business`, `prospect_performance`,
 `sales_conversion`, `campaign_performance`, `project_progress`, `financial_summary`, `agent_performance`.
 
-## Planned endpoints (later phases)
+## Phase 6 changes
 
-| Prefix | Phase | Main operations |
+| Method | Path | Description |
 |---|---|---|
+| PATCH | `/auth/users/{id}` | `{is_active?, role?}` (FOUNDER/ADMIN). Deactivation and role changes revoke the user's sessions. Only a Founder manages Founder/Admin accounts; nobody changes themself; the last active Founder is protected |
+| GET | `/settings/system` | Adds `warnings[]` (configuration issues) and `api_docs_enabled` |
+
+Other behaviour: `POST /auth/login` returns 429 after 5 failed attempts for the same account within
+15 minutes; request bodies over 5 MB return 413; chunked bodies without a length return 411;
+database constraint conflicts return 409; `/docs` and `/openapi.json` are disabled in production.
+

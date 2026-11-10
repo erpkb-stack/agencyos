@@ -1,18 +1,39 @@
+# Local or single-server deployment.
+#   SQLite (default):      docker compose up -d --build
+#   With PostgreSQL:       docker compose --profile postgres up -d --build
+#                          and set DATABASE_URL=postgresql+psycopg://agencyos:<password>@db:5432/agencyos in .env
+# Put a TLS reverse proxy (Caddy, nginx) in front for anything beyond localhost; see docs/DEPLOYMENT.md.
 services:
   agencyos:
     build: .
     image: agencyos:local
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"   # localhost only; expose through your reverse proxy
     env_file:
       - .env
     environment:
-      DATABASE_URL: sqlite:////app/data/agencyos.db
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/agencyos.db}
     volumes:
       - agencyos-data:/app/data
       - agencyos-storage:/app/storage
     restart: unless-stopped
 
+  db:
+    image: postgres:16
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: agencyos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}   # required for the postgres profile; set it in .env
+      POSTGRES_DB: agencyos
+    volumes:
+      - agencyos-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agencyos"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   agencyos-data:
   agencyos-storage:
+  agencyos-pg:

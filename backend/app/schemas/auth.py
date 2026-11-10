@@ -53,5 +53,12 @@ class CreateUserRequest(BaseModel):
     _email = field_validator("email")(_check_email)
 
 
+class UpdateUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_active: bool | None = None
+    role: UserRole | None = None
+
+
 class DemoLoginStatus(BaseModel):
     enabled: bool

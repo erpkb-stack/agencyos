@@ -10,3 +10,5 @@ httpx==0.28.1
 # LLM provider SDKs (only imported inside app/providers/)
 anthropic==2.7.0
 openai==3.48.0
+# PostgreSQL driver (only used when DATABASE_URL is postgresql+psycopg://...)
+psycopg[binary]==3.3.8

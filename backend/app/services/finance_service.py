@@ -284,7 +284,8 @@ def create_invoice(db: Session, user: User, data: dict[str, Any]) -> Invoice:
 def invoice_from_client(db: Session, user: User, client_id: int, data: dict[str, Any]) -> Invoice:
     """Draft an invoice from the client's agreed fees (retainer and, optionally, setup fee)."""
     client = _client(db, client_id)
-    assert client is not None
+    if client is None:  # pragma: no cover - _client raises for a missing ID
+        raise NotFoundError("Client not found")
     items = []
     label = data.get("period_label") or date.today().strftime("%B %Y")
     if money(client.monthly_fee) > 0:

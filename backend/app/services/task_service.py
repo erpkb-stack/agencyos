@@ -80,7 +80,8 @@ def delete_conversation(db: Session, user: User, conversation_id: int) -> None:
 def ceo_agent(db: Session) -> Agent:
     agent_service.ensure_seeded(db)
     agent = agent_service.get_by_key(db, CEO_KEY)
-    assert agent is not None
+    if agent is None:  # pragma: no cover - ensure_seeded creates it
+        raise AppError("The AI CEO agent is missing; run `python -m app.cli init-db`")
     return agent
 
 

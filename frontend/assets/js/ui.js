@@ -1,5 +1,14 @@
 // DOM helpers. Text is always set via textContent — never innerHTML with data.
 
+// Conditional UI is written as `cond ? node : null`. Native replaceChildren/append would render
+// null as the text "null", so skip empty values everywhere (the same rule el() applies).
+for (const method of ["replaceChildren", "append"]) {
+  const native = Element.prototype[method];
+  Element.prototype[method] = function (...nodes) {
+    return native.apply(this, nodes.filter((n) => n !== null && n !== undefined && n !== false));
+  };
+}
+
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs ?? {})) {
@@ -43,7 +52,7 @@ export const fmt = {
 
 const STATUS_TONES = {
   success: ["COMPLETED", "SUCCEEDED", "APPROVED", "ACTIVE", "WON", "PAID", "DONE", "DELIVERED"],
-  warning: ["PENDING", "AWAITING_APPROVAL", "AWAITING_CLIENT", "REVIEW", "PAUSED", "PARTIALLY_PAID"],
+  warning: ["PENDING", "INACTIVE", "AWAITING_APPROVAL", "AWAITING_CLIENT", "REVIEW", "PAUSED", "PARTIALLY_PAID"],
   danger: ["FAILED", "REJECTED", "LOST", "CANCELLED", "EXPIRED", "VOID"],
   info: ["RUNNING", "PLANNING", "IN_PROGRESS", "ASSIGNED", "SENT"],
 };

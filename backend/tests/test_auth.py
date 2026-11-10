@@ -181,9 +181,10 @@ def test_validation_errors_use_standard_shape(founder_client: TestClient):
 def test_login_rate_limited(client: TestClient, make_user):
     make_user()
     limit = login_limiter.limit
+    # Different accounts each time, so only the per-IP limit applies (not the per-account one).
     statuses = [
-        client.post("/api/v1/auth/login", json={"email": "founder@example.com", "password": "x"}).status_code
-        for _ in range(limit + 1)
+        client.post("/api/v1/auth/login", json={"email": f"user{i}@example.com", "password": "x"}).status_code
+        for i in range(limit + 1)
     ]
     assert statuses[:limit] == [401] * limit
     assert statuses[-1] == 429

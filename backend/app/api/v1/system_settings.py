@@ -35,4 +35,6 @@ def system_info(
         "demo_login_enabled": settings.demo_login_enabled,
         "session_ttl_hours": settings.session_ttl_hours,
         "external_sending_enabled": False,
+        "api_docs_enabled": settings.api_docs_enabled,
+        "warnings": settings.production_warnings(),
     }

@@ -15,7 +15,9 @@ from app.models.identity import User, UserSession
 from app.security.passwords import hash_password, validate_password_strength, verify_password
 from app.security.tokens import hash_session_token, new_session_token
 from app.services import audit_service
-from app.utils.errors import AppError, AuthenticationError, ConflictError, PermissionDeniedError
+from app.utils.errors import (
+    AppError, AuthenticationError, ConflictError, NotFoundError, PermissionDeniedError, RateLimitedError,
+)
 from app.utils.time import ensure_aware, utcnow
 
 DEMO_USER_EMAIL = "demo.founder@agencyos.local"
@@ -62,9 +64,18 @@ def login(
     ip: str | None = None,
     user_agent: str | None = None,
 ) -> IssuedSession:
-    user = db.scalar(select(User).where(User.email == normalize_email(email)))
+    from app.security.deps import account_limiter
+
+    key = normalize_email(email)
+    if account_limiter.exceeded(key):
+        audit_service.record(db, "auth.login_throttled", actor_label=key[:200],
+                             summary="Login refused: too many failed attempts for this account", ip_address=ip)
+        db.commit()
+        raise RateLimitedError("Too many failed attempts for this account; try again later")
+    user = db.scalar(select(User).where(User.email == key))
     valid = verify_password(password, user.password_hash if user else _DUMMY_HASH)
     if not user or not valid or not user.is_active:
+        account_limiter.hit(key)
         audit_service.record(
             db,
             "auth.login_failed",
@@ -76,6 +87,7 @@ def login(
         db.commit()
         raise AuthenticationError("Invalid email or password")
 
+    account_limiter.clear(key)
     issued = _issue_session(db, user, settings, ip, user_agent)
     audit_service.record(
         db, "auth.login", user=user, entity_type="user", entity_id=user.id,
@@ -203,6 +215,60 @@ def create_user(
         actor_label=actor.full_name if actor else "CLI",
         summary=f"User {user.email} created with role {role.value}",
     )
+    db.commit()
+    return user
+
+
+def _revoke_all_sessions(db: Session, user: User) -> None:
+    db.execute(update(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
+               .values(revoked_at=utcnow()))
+
+
+def update_user(db: Session, actor: User, user_id: int, *, is_active: bool | None, role: UserRole | None) -> User:
+    """Activate/deactivate or change a role. Deactivation signs the user out everywhere."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFoundError("User not found")
+    if user.id == actor.id:
+        raise PermissionDeniedError("You cannot change your own status or role")
+    privileged = {UserRole.FOUNDER, UserRole.ADMIN}
+    if actor.role != UserRole.FOUNDER and (user.role in privileged or role in privileged):
+        raise PermissionDeniedError("Only a founder can manage founder and admin accounts")
+    changes = []
+    if is_active is not None and is_active != user.is_active:
+        if not is_active and user.role == UserRole.FOUNDER and _active_founders(db) <= 1:
+            raise PermissionDeniedError("The last active founder cannot be deactivated")
+        user.is_active = is_active
+        if not is_active:
+            _revoke_all_sessions(db, user)
+        changes.append("activated" if is_active else "deactivated")
+    if role is not None and role != user.role:
+        if user.role == UserRole.FOUNDER and _active_founders(db) <= 1:
+            raise PermissionDeniedError("The last founder's role cannot be changed")
+        changes.append(f"role {user.role.value} → {role.value}")
+        user.role = role
+        _revoke_all_sessions(db, user)  # new permissions apply from the next sign-in
+    if changes:
+        audit_service.record(db, "user.updated", user=actor, entity_type="user", entity_id=user.id,
+                             summary=f"{user.email}: {', '.join(changes)}")
+        db.commit()
+    return user
+
+
+def _active_founders(db: Session) -> int:
+    return len(list(db.scalars(select(User.id).where(User.role == UserRole.FOUNDER, User.is_active.is_(True)))))
+
+
+def reset_password(db: Session, email: str, new_password: str) -> User:
+    """CLI-only reset for someone locked out. Revokes every session."""
+    user = db.scalar(select(User).where(User.email == normalize_email(email)))
+    if user is None:
+        raise NotFoundError("No user with that email")
+    _check_strength(new_password)
+    user.password_hash = hash_password(new_password)
+    _revoke_all_sessions(db, user)
+    audit_service.record(db, "auth.password_reset", actor_label="CLI", entity_type="user", entity_id=user.id,
+                         summary=f"Password reset for {user.email} from the command line")
     db.commit()
     return user
 

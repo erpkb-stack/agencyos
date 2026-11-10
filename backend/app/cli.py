@@ -2,6 +2,10 @@
 
     python -m app.cli init-db
     python -m app.cli create-user --email you@example.com --name "Your Name" --role FOUNDER
+    python -m app.cli reset-password --email you@example.com
+    python -m app.cli set-active --email someone@example.com --inactive
+    python -m app.cli backup-db [--dest DIR] [--keep 14]
+    python -m app.cli check-config
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import sys
 from alembic import command
 from alembic.config import Config
 
-from app.config.settings import BACKEND_DIR, DATA_DIR, STORAGE_DIR
+from app.config.settings import BACKEND_DIR, DATA_DIR, STORAGE_DIR, get_settings
 from app.database.session import SessionLocal
 from app.models.enums import UserRole
 from app.services import auth_service
@@ -34,13 +38,9 @@ def init_db() -> None:
 
 
 def create_user(email: str, name: str, role: str, password_stdin: bool) -> int:
-    if password_stdin:
-        password = sys.stdin.readline().rstrip("\n")
-    else:
-        password = getpass.getpass("Password: ")
-        if password != getpass.getpass("Repeat password: "):
-            print("Passwords do not match.", file=sys.stderr)
-            return 1
+    password = _read_password(password_stdin)
+    if password is None:
+        return 1
     with SessionLocal() as db:
         try:
             user = auth_service.create_user(
@@ -55,6 +55,101 @@ def create_user(email: str, name: str, role: str, password_stdin: bool) -> int:
     return 0
 
 
+def _read_password(from_stdin: bool) -> str | None:
+    if from_stdin:
+        return sys.stdin.readline().rstrip("\n")
+    password = getpass.getpass("New password: ")
+    if password != getpass.getpass("Repeat password: "):
+        print("Passwords do not match.", file=sys.stderr)
+        return None
+    return password
+
+
+def reset_password(email: str, password_stdin: bool) -> int:
+    password = _read_password(password_stdin)
+    if password is None:
+        return 1
+    with SessionLocal() as db:
+        try:
+            user = auth_service.reset_password(db, email, password)
+        except AppError as exc:
+            print(f"Error: {exc.message}", file=sys.stderr)
+            for detail in exc.details or []:
+                print(f"  - {detail}", file=sys.stderr)
+            return 1
+    print(f"Password reset for {user.email}. All of their sessions were signed out.")
+    return 0
+
+
+def set_active(email: str, active: bool) -> int:
+    from sqlalchemy import select, update
+
+    from app.models.identity import User, UserSession
+    from app.services import audit_service
+    from app.utils.time import utcnow
+
+    with SessionLocal() as db:
+        user = db.scalar(select(User).where(User.email == auth_service.normalize_email(email)))
+        if user is None:
+            print("Error: no user with that email", file=sys.stderr)
+            return 1
+        user.is_active = active
+        if not active:
+            db.execute(update(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
+                       .values(revoked_at=utcnow()))
+        audit_service.record(db, "user.updated", actor_label="CLI", entity_type="user", entity_id=user.id,
+                             summary=f"{user.email} {'activated' if active else 'deactivated'} from the command line")
+        db.commit()
+    print(f"{email} is now {'active' if active else 'inactive'}.")
+    return 0
+
+
+def backup_db(dest: str | None, keep: int) -> int:
+    """Consistent online backup of the SQLite database (safe while the app is running)."""
+    import sqlite3
+    from datetime import datetime
+    from pathlib import Path
+
+    settings = get_settings()
+    if settings.database_backend != "sqlite":
+        print("This command backs up SQLite. For PostgreSQL use pg_dump (see docs/DEPLOYMENT.md).", file=sys.stderr)
+        return 1
+    source = Path(settings.database_url.split("///", 1)[1])
+    if not source.exists():
+        print(f"Error: database file not found: {source}", file=sys.stderr)
+        return 1
+    target_dir = Path(dest) if dest else DATA_DIR / "backups"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"agencyos-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+    with sqlite3.connect(source) as src, sqlite3.connect(target) as dst:
+        src.backup(dst)
+    with sqlite3.connect(target) as check:
+        result = check.execute("PRAGMA integrity_check").fetchone()[0]
+    if result != "ok":
+        print(f"Error: backup failed its integrity check ({result})", file=sys.stderr)
+        return 1
+    target.chmod(0o600)
+    backups = sorted(target_dir.glob("agencyos-*.db"))
+    for old in backups[:-keep] if keep > 0 else []:
+        old.unlink()
+    print(f"Backup written to {target} ({target.stat().st_size:,} bytes, integrity ok). Kept {min(len(backups), keep)}.")
+    return 0
+
+
+def check_config() -> int:
+    settings = get_settings()
+    print(f"Environment: {settings.app_env.value}")
+    print(f"Database: {settings.database_backend}")
+    print(f"LLM provider: {settings.llm_provider.value}")
+    print(f"Secure cookies: {settings.secure_cookies} · API docs: {settings.api_docs_enabled}")
+    warnings = settings.production_warnings()
+    for w in warnings:
+        print(f"WARNING: {w}")
+    if not warnings:
+        print("No configuration warnings.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agencyos")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -64,11 +159,31 @@ def main(argv: list[str] | None = None) -> int:
     cu.add_argument("--name", required=True)
     cu.add_argument("--role", default="FOUNDER", choices=[r.value for r in UserRole])
     cu.add_argument("--password-stdin", action="store_true", help="Read password from stdin")
+    rp = sub.add_parser("reset-password", help="Set a new password for a user and sign them out everywhere")
+    rp.add_argument("--email", required=True)
+    rp.add_argument("--password-stdin", action="store_true", help="Read password from stdin")
+    sa = sub.add_parser("set-active", help="Activate or deactivate a user")
+    sa.add_argument("--email", required=True)
+    group = sa.add_mutually_exclusive_group(required=True)
+    group.add_argument("--active", dest="active", action="store_true")
+    group.add_argument("--inactive", dest="active", action="store_false")
+    bk = sub.add_parser("backup-db", help="Back up the SQLite database")
+    bk.add_argument("--dest", help="Directory for backups (default data/backups)")
+    bk.add_argument("--keep", type=int, default=14, help="How many backups to keep (default 14)")
+    sub.add_parser("check-config", help="Print configuration and production warnings")
     args = parser.parse_args(argv)
 
     if args.command == "init-db":
         init_db()
         return 0
+    if args.command == "reset-password":
+        return reset_password(args.email, args.password_stdin)
+    if args.command == "set-active":
+        return set_active(args.email, args.active)
+    if args.command == "backup-db":
+        return backup_db(args.dest, args.keep)
+    if args.command == "check-config":
+        return check_config()
     return create_user(args.email, args.name, args.role, args.password_stdin)
 
 

@@ -52,6 +52,8 @@ def create_app() -> FastAPI:
             f"db={settings.database_backend}, llm={settings.llm_provider.value}, "
             f"demo_login={settings.demo_login_enabled})"
         )
+        for warning in settings.production_warnings():
+            logger.warning(f"Configuration: {warning}")
         _startup_housekeeping(logger)
         yield
         shutdown_runner()
@@ -63,6 +65,9 @@ def create_app() -> FastAPI:
         description="Internal AI agency operating system. All endpoints under /api/v1.",
         debug=settings.debug,
         lifespan=lifespan,
+        docs_url="/docs" if settings.api_docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if settings.api_docs_enabled else None,
     )
 
     if settings.cors_origins:
@@ -73,7 +78,11 @@ def create_app() -> FastAPI:
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
             allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID"],
         )
-    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(
+        RequestContextMiddleware,
+        max_request_bytes=settings.max_request_bytes,
+        hsts=settings.secure_cookies,
+    )
     register_exception_handlers(app)
     app.include_router(api_router)
 
