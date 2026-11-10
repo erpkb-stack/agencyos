@@ -3,8 +3,8 @@
 Internal platform for running an AI-assisted marketing and automation agency: Founder dashboard,
 AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and approvals.
 
-**Status: all six phases complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics,
-Production readiness). [![CI](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml/badge.svg)](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml) See
+**Status: Phases 1–7 complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics,
+Production readiness, Parallel agents & task queue). [![CI](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml/badge.svg)](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml) See
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the phase roadmap.
 
 | Works now | Coming next |
@@ -21,7 +21,7 @@ Production readiness). [![CI](https://github.com/erpkb-stack/agencyos/actions/wo
 | **Funnels**: 5 industry templates, form builder, landing-page HTML with sandboxed desktop/mobile preview, form + mobile validation, publish approval, HTML download | |
 | **Finance**: invoices (from client fees, printable), payments (drive paid status), revenue, expenses, AI-usage cost, profit, MRR, outstanding/overdue, client profitability estimate, 12-month chart | |
 | **Analytics**: 9 reports (daily activity, weekly CEO, monthly business, prospects, sales conversion, campaigns, project progress, finance, agents) with CSV export and AI summaries | |
-| **Task orchestration**: state machine, retries, cancellation, delegation limits, token + cost tracking | |
+| **Task orchestration**: state machine, retries, cancellation, delegation limits, token + cost tracking; specialists run **in parallel**; durable database task queue; per-request and monthly AI cost limits | |
 | **Approvals**: every external action an agent proposes waits for a Founder/Admin decision | |
 | Providers: offline Mock (default), OpenAI, Anthropic | |
 
@@ -138,6 +138,24 @@ Run from `backend/` with `../.venv/bin/python -m app.cli …` (or `docker compos
 | `set-active --email … --active/--inactive` | Reactivate / deactivate a user |
 | `backup-db [--dest DIR] [--keep 14]` | Consistent SQLite backup with integrity check |
 | `check-config` | Show configuration and production warnings |
+| `worker` | Run the agent task queue in its own process (with `RUN_WORKER_IN_PROCESS=false`) |
+
+## Agent speed, queue and spending limits (Phase 7)
+
+- **Parallel specialists.** A CEO request's specialists run at the same time (up to
+  `ORCHESTRATOR_PARALLEL_AGENTS`), so a three-agent request takes about as long as its slowest
+  agent. Measured with Claude Opus 5.5 on the same three-agent request: **234 s → 98 s**.
+- **Durable queue.** New work is stored as a queued task in the database and claimed atomically by a
+  worker (highest priority first), so nothing is lost on a restart: queued tasks still run, and a
+  request interrupted mid-run is re-queued once automatically. Tasks show **Queued** until a worker
+  picks them up. The worker runs inside the app by default; set `RUN_WORKER_IN_PROCESS=false` and run
+  `python -m app.cli worker` to move agent work into its own process.
+- **Spending limits.** Before every model call the estimated cost of the request so far is checked
+  against `AI_COST_LIMIT_PER_REQUEST` (default $2.00); new work is refused once this month's estimate
+  reaches `AI_COST_LIMIT_PER_MONTH` (0 = off). A request stopped by a limit keeps the finished agents'
+  work and says which limit was hit. Settings shows the limits and this month's estimated spend; each
+  task shows its request's cost. Estimates use list prices: models without a known price count as $0,
+  and calls already in flight may overshoot a limit by one call per running agent.
 
 ## Business records (Phase 3)
 
@@ -207,6 +225,10 @@ All settings are environment variables (or `.env`). See [.env.example](.env.exam
 | `ANTHROPIC_EFFORT` | `medium` | `low`–`max`; Claude's reasoning depth (cost vs. quality) |
 | `LLM_TIMEOUT_SECONDS` / `LLM_MAX_RETRIES` | `120` / `2` | Per provider call; the orchestrator adds its own bounded retry (2 attempts per task) |
 | `ORCHESTRATOR_MAX_SUBTASKS` / `ORCHESTRATOR_MAX_DEPTH` | `5` / `2` | Delegation limits enforced in Python |
+| `ORCHESTRATOR_PARALLEL_AGENTS` | `3` | Specialists of one request that run at the same time |
+| `TASK_WORKERS` | `2` | Requests processed at the same time |
+| `RUN_WORKER_IN_PROCESS` | `true` | `false` + `python -m app.cli worker` runs agent work in its own process |
+| `AI_COST_LIMIT_PER_REQUEST` / `AI_COST_LIMIT_PER_MONTH` | `2.00` / `0` | Estimated USD; 0 = no limit. Checked before every model call |
 | `AGENCY_NAME`, `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL` | empty | Sender identity filled into email drafts |
 | `PUBLIC_BASE_URL` | `http://localhost:8000` | Base for unsubscribe links (use https in production) |
 | `ENABLE_API_DOCS` | on except production | `/docs` and `/openapi.json` |
@@ -267,8 +289,6 @@ agencyos/
 - No multi-factor authentication yet (see docs/SECURITY.md).
 - The OpenAI and Anthropic adapters are tested against fake SDK clients only; no live call has
   been made from this machine (no keys configured).
-- Tasks run one at a time on a single background thread. A long real-model request delays the
-  next one; a worker queue can replace the runner later.
 - The mock provider routes requests by keywords, so its choice of agents is approximate. Real
   models choose from the agent descriptions.
 - Duplicate detection compares phone numbers in Python over at most 500 candidate rows, which is

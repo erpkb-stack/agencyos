@@ -227,32 +227,6 @@ def test_cli_backup_and_check_config(tmp_path: Path, monkeypatch, capsys):
 # -- runner and health -------------------------------------------------------------------------
 
 
-def test_thread_runner_runs_tasks_in_background(founder_client: TestClient, orchestrator, session_factory):
-    from app.orchestrator.runner import ThreadRunner
-
-    agents = {a["key"]: a for a in founder_client.get(f"{API}/agents").json()["items"]}
-    with session_factory() as db:
-        task = AgentTask(agent_id=agents["automation"]["id"], title="bg", status=TaskStatus.PENDING,
-                         input={"instructions": "Design a workflow", "context": {}})
-        db.add(task)
-        db.commit()
-        task_id = task.id
-    runner = ThreadRunner(orchestrator)
-    try:
-        runner.submit(task_id)
-        deadline = time.time() + 10
-        status = None
-        while time.time() < deadline:
-            with session_factory() as db:
-                status = db.get(AgentTask, task_id).status
-            if status == TaskStatus.COMPLETED:
-                break
-            time.sleep(0.05)
-        assert status == TaskStatus.COMPLETED
-    finally:
-        runner.shutdown()
-
-
 def test_readiness_reports_database_failure(client: TestClient):
     from app.database.session import get_db
 

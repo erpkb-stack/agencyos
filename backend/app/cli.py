@@ -6,6 +6,7 @@
     python -m app.cli set-active --email someone@example.com --inactive
     python -m app.cli backup-db [--dest DIR] [--keep 14]
     python -m app.cli check-config
+    python -m app.cli worker
 """
 
 from __future__ import annotations
@@ -136,6 +137,31 @@ def backup_db(dest: str | None, keep: int) -> int:
     return 0
 
 
+def worker() -> int:
+    """Run the agent task queue in this process until interrupted (Ctrl+C / SIGTERM)."""
+    import signal
+    import threading
+
+    from app.database.session import SessionLocal as Session_
+    from app.orchestrator import build_worker
+    from app.orchestrator.runner import recover_interrupted
+
+    settings = get_settings()
+    with Session_() as db:
+        recovered = recover_interrupted(db)
+    print(f"Worker started: {settings.task_workers} request(s) at a time, "
+          f"{settings.orchestrator_parallel_agents} agents per request. "
+          f"Re-queued {recovered['requeued']}, failed {recovered['failed']} interrupted task(s).", flush=True)
+    stop = threading.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: stop.set())
+    queue = build_worker().start()
+    stop.wait()
+    print("Stopping worker; running tasks will be re-queued on next start.", flush=True)
+    queue.shutdown(wait=False)
+    return 0
+
+
 def check_config() -> int:
     settings = get_settings()
     print(f"Environment: {settings.app_env.value}")
@@ -171,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     bk.add_argument("--dest", help="Directory for backups (default data/backups)")
     bk.add_argument("--keep", type=int, default=14, help="How many backups to keep (default 14)")
     sub.add_parser("check-config", help="Print configuration and production warnings")
+    sub.add_parser("worker", help="Run the agent task queue (use with RUN_WORKER_IN_PROCESS=false)")
     args = parser.parse_args(argv)
 
     if args.command == "init-db":
@@ -184,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         return backup_db(args.dest, args.keep)
     if args.command == "check-config":
         return check_config()
+    if args.command == "worker":
+        return worker()
     return create_user(args.email, args.name, args.role, args.password_stdin)
 
 

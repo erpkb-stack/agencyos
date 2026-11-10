@@ -6,6 +6,17 @@ function kv(rows) {
   return el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
 }
 
+function agentWorkText(o) {
+  const where = o.worker_in_process ? "in the web process" : "in a separate worker process";
+  return `${o.parallel_agents} agents in parallel per request · ${o.task_workers} requests at a time · ${where}`;
+}
+
+function costLimitText(o) {
+  const perRequest = Number(o.per_request_limit) > 0 ? `${fmt.money(o.per_request_limit)} per request` : "no per-request limit";
+  const perMonth = Number(o.per_month_limit) > 0 ? `${fmt.money(o.per_month_limit)} per month` : "no monthly limit";
+  return `${perRequest} · ${perMonth}`;
+}
+
 function configured(flag) {
   return flag ? el("span", { class: "badge badge-success" }, "Configured") : el("span", { class: "badge" }, "Not set");
 }
@@ -137,6 +148,10 @@ export function renderSettings({ view, user, system }) {
         ["Demo login", system.demo_login_enabled ? "Enabled (development)" : "Disabled"],
         ["External sending", system.external_sending_enabled ? "Enabled" : "Disabled — drafts only"],
         ["Session length", `${system.session_ttl_hours} hours`],
+        ["Agent work", agentWorkText(system.orchestrator)],
+        ["Queued tasks", String(system.orchestrator.queued)],
+        ["AI cost limits", costLimitText(system.orchestrator)],
+        ["AI spend this month (est.)", fmt.money(system.orchestrator.month_spend)],
         ["API docs (/docs)", system.api_docs_enabled ? "On" : "Off"],
       ]),
       system.warnings?.length ? el("div", { class: "notice notice-warning mt-16" }, el("strong", {}, "Configuration warnings"), el("ul", { class: "list-plain" }, system.warnings.map((w) => el("li", {}, w)))) : el("p", { class: "small score-high mt-16" }, "✓ No configuration warnings."),

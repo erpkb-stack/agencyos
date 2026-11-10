@@ -14,7 +14,7 @@ from app.config.settings import get_settings
 def build_engine(url: str, echo: bool = False) -> Engine:
     kwargs: dict[str, Any] = {"echo": echo, "pool_pre_ping": True}
     if url.startswith("sqlite"):
-        kwargs["connect_args"] = {"check_same_thread": False}
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
     engine = create_engine(url, **kwargs)
 
     if url.startswith("sqlite"):
@@ -24,6 +24,7 @@ def build_engine(url: str, echo: bool = False) -> Engine:
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA foreign_keys=ON")
             cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
             cur.close()
 
     return engine

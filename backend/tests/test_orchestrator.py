@@ -324,14 +324,20 @@ def test_task_history_persists_across_app_restart(founder_client: TestClient, se
         assert len(convo["messages"]) == 2
 
 
-def test_recover_interrupted_marks_running_tasks_failed(founder_client: TestClient, db):
+def test_recover_interrupted_requeues_then_fails(founder_client: TestClient, db):
     from app.orchestrator.runner import recover_interrupted
 
     task = _direct(founder_client)
     row = db.get(AgentTask, task["id"])
-    row.status = S.RUNNING  # simulate a crash mid-run
+    row.status, row.attempts = S.RUNNING, 1  # simulate a crash mid-run with an attempt left
     db.commit()
-    assert recover_interrupted(db) == 1
+    assert recover_interrupted(db) == {"requeued": 1, "failed": 0}
+    db.refresh(row)
+    assert row.status == S.PENDING
+
+    row.status, row.attempts = S.RUNNING, row.max_attempts  # no attempts left
+    db.commit()
+    assert recover_interrupted(db) == {"requeued": 0, "failed": 1}
     db.refresh(row)
     assert row.status == S.FAILED and "restart" in row.error
 

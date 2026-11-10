@@ -85,8 +85,16 @@ def ceo_agent(db: Session) -> Agent:
     return agent
 
 
+def _check_month_budget(db: Session) -> None:
+    from app.config.settings import get_settings
+    from app.orchestrator import budget
+
+    budget.check_month(db, get_settings())
+
+
 def send_ceo_message(db: Session, user: User, content: str, conversation_id: int | None) -> dict[str, Any]:
     """Store the Founder's message and create the CEO root task (the runner executes it)."""
+    _check_month_budget(db)
     ceo = ceo_agent(db)
     if conversation_id is None:
         conversation = Conversation(user_id=user.id, title=" ".join(content.split())[:80] or "New conversation")
@@ -130,6 +138,7 @@ def create_task(db: Session, user: User, *, agent_id: int, title: str, instructi
     agent = agent_service.get_agent(db, agent_id)
     if not agent.is_active:
         raise AppError("This agent is inactive; activate it first")
+    _check_month_budget(db)
     task = AgentTask(
         agent_id=agent.id, created_by_user_id=user.id, title=title, task_type=task_type, project_id=project_id,
         priority=priority, status=S.PENDING, depth=0,
@@ -173,6 +182,7 @@ def cancel_task(db: Session, user: User, task: AgentTask) -> AgentTask:
 def retry_task(db: Session, user: User, task: AgentTask) -> AgentTask:
     if task.status != S.FAILED:
         raise AppError("Only failed tasks can be retried")
+    _check_month_budget(db)
     if task.agent is None or not task.agent.is_active:
         raise AppError("The assigned agent is missing or inactive")
     transition(task, S.PENDING)
@@ -204,6 +214,8 @@ def phase_of(task: AgentTask) -> str:
     """User-facing stage: planning is a RUNNING CEO task that has not delegated yet."""
     if task.status == S.RUNNING and (task.output or {}).get("phase") == "planning":
         return "PLANNING"
+    if task.status == S.PENDING:
+        return "QUEUED"
     return task.status.value
 
 
@@ -241,8 +253,12 @@ def task_detail(db: Session, task: AgentTask) -> dict[str, Any]:
     executions = list(db.scalars(select(AgentExecution).where(AgentExecution.task_id == task.id)
                                  .order_by(AgentExecution.id)))
     approvals = list(db.scalars(select(Approval).where(Approval.task_id == task.id).order_by(Approval.id)))
+    from app.orchestrator import budget
+
+    root_id = budget.root_id_of(task)
     return {
         **task_tree(db, task),
+        "request_cost": f"{budget.request_spend(db, root_id):.4f}", "request_root_id": root_id,
         "input": task.input, "output": task.output,
         "executions": [execution_out(e) for e in executions],
         "approvals": [approval_out(db, a) for a in approvals],
