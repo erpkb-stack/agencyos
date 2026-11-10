@@ -3,6 +3,7 @@ import { api, showFormError } from "../api.js";
 import { canAdmin, el, errorState, field, fmt, loadingState, modal, statusBadge, toast } from "../ui.js";
 
 const STATUSES = ["PENDING", "APPROVED", "REJECTED", "EXPIRED"];
+const ENTITY_ROUTES = { campaign: "campaigns", funnel: "funnels" };
 
 function decide(approval, decision, onDecided) {
   const error = el("div", { class: "form-error hidden", role: "alert" });
@@ -42,7 +43,9 @@ export function approvalCard(a, { canDecide, onDecided }) {
       "div",
       { class: "deliverable-body" },
       a.payload?.details ? el("p", { class: "pre" }, a.payload.details) : null,
-      el("div", { class: "small faint" }, `Requested by ${a.requested_by_agent ?? "—"} · ${fmt.datetime(a.created_at)}`, a.task_id ? el("span", {}, " · ", el("a", { href: `#/tasks/${a.task_id}` }, `task #${a.task_id}`)) : null),
+      el("div", { class: "small faint" }, `Requested by ${a.requested_by_agent ?? a.requested_by_user ?? "—"} · ${fmt.datetime(a.created_at)}`,
+        a.task_id ? el("span", {}, " · ", el("a", { href: `#/tasks/${a.task_id}` }, `task #${a.task_id}`)) : null,
+        a.entity_type && ENTITY_ROUTES[a.entity_type] ? el("span", {}, " · ", el("a", { href: `#/${ENTITY_ROUTES[a.entity_type]}/${a.entity_id}` }, `open ${a.entity_type}`)) : null),
       a.status === "PENDING" && a.expires_at ? el("div", { class: "small faint" }, `Expires ${fmt.datetime(a.expires_at)}`) : null,
       a.decided_at ? el("div", { class: "small faint" }, `${fmt.label(a.status)}${a.decided_by ? ` by ${a.decided_by}` : ""} · ${fmt.datetime(a.decided_at)}${a.comments ? ` — ${a.comments}` : ""}`) : null,
       a.status === "PENDING" && canDecide

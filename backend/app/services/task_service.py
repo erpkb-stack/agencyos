@@ -7,10 +7,11 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app import approvals as approval_gate
 from app.agents.registry import CEO_KEY
 from app.models.ai import Agent, AgentExecution, AgentTask, Conversation, Message
 from app.models.approvals import Approval
-from app.models.enums import ActorType, ApprovalStatus, MessageRole, TaskPriority, TaskStatus as S
+from app.models.enums import ActorType, ApprovalStatus, MessageRole, TaskPriority, TaskStatus as S, UserRole
 from app.models.identity import User
 from app.orchestrator.state import TERMINAL, transition
 from app.services import agent_service, audit_service
@@ -123,14 +124,15 @@ def get_task(db: Session, task_id: int) -> AgentTask:
 
 def create_task(db: Session, user: User, *, agent_id: int, title: str, instructions: str,
                 priority: TaskPriority, context: dict[str, Any] | None = None,
-                task_type: str = "direct", project_id: int | None = None) -> AgentTask:
+                task_type: str = "direct", project_id: int | None = None,
+                link: dict[str, Any] | None = None) -> AgentTask:
     agent = agent_service.get_agent(db, agent_id)
     if not agent.is_active:
         raise AppError("This agent is inactive; activate it first")
     task = AgentTask(
         agent_id=agent.id, created_by_user_id=user.id, title=title, task_type=task_type, project_id=project_id,
         priority=priority, status=S.PENDING, depth=0,
-        input={"instructions": instructions, "context": context or {}},
+        input={"instructions": instructions, "context": context or {}, **({"link": link} if link else {})},
     )
     db.add(task)
     db.flush()
@@ -259,6 +261,7 @@ def expire_overdue(db: Session) -> None:
         approval.decided_at = now
         approval.comments = "Expired without a decision"
         _settle_task(db, approval)
+        approval_gate.settle(db, approval)
     if overdue:
         db.commit()
 
@@ -266,10 +269,13 @@ def expire_overdue(db: Session) -> None:
 def approval_out(db: Session, a: Approval) -> dict[str, Any]:
     agent = db.get(Agent, a.requested_by_agent_id) if a.requested_by_agent_id else None
     decider = db.get(User, a.decided_by_user_id) if a.decided_by_user_id else None
+    requester = db.get(User, a.requested_by_user_id) if a.requested_by_user_id else None
     return {
         "id": a.id, "action_type": a.action_type.value, "title": a.title, "status": a.status.value,
         "payload": a.payload, "task_id": a.task_id, "client_id": a.client_id,
         "requested_by_agent": agent.name if agent else None,
+        "requested_by_user": requester.full_name if requester else None,
+        "entity_type": (a.payload or {}).get("entity_type"), "entity_id": (a.payload or {}).get("entity_id"),
         "decided_by": decider.full_name if decider else None,
         "decided_at": a.decided_at, "comments": a.comments,
         "expires_at": a.expires_at, "created_at": a.created_at,
@@ -312,13 +318,16 @@ def decide_approval(db: Session, user: User, approval_id: int, decision: Approva
         raise NotFoundError("Approval not found")
     if approval.status != ApprovalStatus.PENDING:
         raise AppError(f"This approval is already {approval.status.value.lower()}")
-    if approval.requested_by_user_id is not None and approval.requested_by_user_id == user.id:
+    # Four-eyes rule for admins; the Founder owns the business and may approve their own requests.
+    if (approval.requested_by_user_id is not None and approval.requested_by_user_id == user.id
+            and user.role != UserRole.FOUNDER):
         raise PermissionDeniedError("You cannot approve your own request")
     approval.status = decision
     approval.decided_by_user_id = user.id
     approval.decided_at = utcnow()
     approval.comments = comments
     _settle_task(db, approval)
+    approval_gate.settle(db, approval)
     audit_service.record(
         db, f"approval.{decision.value.lower()}", user=user, actor_type=ActorType.USER,
         entity_type="approval", entity_id=approval.id,

@@ -35,6 +35,7 @@ from app.utils.time import utcnow
 logger = logging.getLogger("agencyos.orchestrator")
 
 APPROVAL_TTL = timedelta(days=7)
+DRAFT_ONLY_TASK_TYPES = {"campaign_generate", "campaign_analyze", "email_generate", "funnel_generate"}
 HISTORY_MESSAGES = 10
 
 
@@ -186,11 +187,12 @@ class Orchestrator:
 
         def call() -> AgentResult:
             worker = self._build_agent(db, agent)
-            task_input = dict(task.input or {})
-            context = dict(task_input.get("context") or {})
+            stored = task.input or {}
+            # Only instructions and context reach the agent; other keys (e.g. record links) stay server-side.
+            context = dict(stored.get("context") or {})
             if TOOL_BUSINESS_DATA in agent.allowed_tools:
                 context["business_snapshot"] = self._business_snapshot(db)
-            task_input["context"] = context
+            task_input = {"instructions": stored.get("instructions", ""), "context": context}
             return worker.execute(task_input, DbRecorder(db, task, agent))
 
         result = self._attempt(db, task, call)
@@ -203,7 +205,14 @@ class Orchestrator:
             "provider": result.response.provider,
             "model": result.response.model,
         }
-        if output.proposed_actions and TOOL_PROPOSE in agent.allowed_tools:
+        notes = list(result.notes)
+        if output.proposed_actions and task.task_type in DRAFT_ONLY_TASK_TYPES:
+            # Drafting for a campaign/funnel: external actions are requested from that record's page.
+            notes.append(f"{len(output.proposed_actions)} proposed action(s) not queued: approval for this "
+                         "work is requested from the campaign, email or funnel page.")
+            task.output = {**task.output, "notes": notes}
+            transition(task, S.COMPLETED)
+        elif output.proposed_actions and TOOL_PROPOSE in agent.allowed_tools:
             self._request_approvals(db, task, output)
             task.requires_approval = True
             transition(task, S.AWAITING_APPROVAL)

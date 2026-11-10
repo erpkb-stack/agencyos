@@ -3,23 +3,26 @@
 Internal platform for running an AI-assisted marketing and automation agency: Founder dashboard,
 AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and approvals.
 
-**Status: Phases 1 (Foundation), 2 (AI CEO) and 3 (Business management) complete.** See
+**Status: Phases 1–4 complete** (Foundation, AI CEO, Business management, Marketing). See
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the phase roadmap.
 
 | Works now | Coming next |
 |---|---|
-| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 4: Campaigns, email drafts, funnels, landing pages |
-| Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | Phase 5: Finance and analytics |
-| **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | Phase 6: Production hardening |
+| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 5: Finance and analytics |
+| Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | Phase 6: Production hardening |
+| **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | |
 | **11 agents** (CEO + 10 specialists) with editable prompts/models, custom agents, test runs, execution history | |
 | **Prospects**: pipeline with search/filter/sort, duplicate detection, CSV import/export, activity timeline, convert to client, "Ask Sales Agent" | |
 | **Clients**: contract status, fees, projects, deliverables, invoices/payments view, activity | |
 | **Projects**: status workflow, tasks with assignees/due dates/dependencies, comments, deliverables, timeline, progress from tasks, "Send to agent" | |
+| **Campaigns**: email and ad campaigns, AI drafts (strategy, sequences, ad copy), audience from prospects, approval gate, budget-change approvals, manual metrics + AI analysis | |
+| **Email marketing**: template library, compliance checks, personalised preview, suppression list, signed unsubscribe links, recipient-list check | |
+| **Funnels**: 5 industry templates, form builder, landing-page HTML with sandboxed desktop/mobile preview, form + mobile validation, publish approval, HTML download | |
 | **Task orchestration**: state machine, retries, cancellation, delegation limits, token + cost tracking | |
 | **Approvals**: every external action an agent proposes waits for a Founder/Admin decision | |
 | Providers: offline Mock (default), OpenAI, Anthropic | |
 
-Sidebar items for unbuilt modules are marked `P4`–`P5`; they open a page that says the module is
+Sidebar items for unbuilt modules are marked `P5`; they open a page that says the module is
 not built yet. There are no placeholder buttons.
 
 ## Using the AI CEO
@@ -132,6 +135,29 @@ docker compose exec agencyos python -m app.cli create-user --email you@youragenc
   are written to the timeline. **Send to agent** hands a task to its assigned agent with the
   project as context; agents still only draft and propose.
 
+## Marketing (Phase 4): drafts only
+
+AgencyOS **never sends email, launches ads or hosts pages**. It drafts, checks and gets approval;
+you run the approved work in your own tools and record the outcome.
+
+- **Campaigns** — create, let agents draft (strategy, email sequence, ad copy, audience ideas),
+  import what you want, pick an audience from your prospects (suppressed addresses are always
+  excluded), then **Request approval**. Email campaigns require a consent basis and a compliance
+  confirmation. After approval you can mark the campaign as running once you've launched it
+  elsewhere, pause/complete it, enter metrics (rates and cost per lead are calculated) and ask the
+  Analytics Agent for an analysis. A budget change on an approved campaign needs its own approval;
+  editing an approved campaign's emails sends it back to draft.
+- **Email rules** — every email must identify the sender (`{{sender_name}}`/`{{agency_name}}`),
+  include the postal address (`{{agency_address}}`) and an unsubscribe (`{{unsubscribe_link}}`).
+  Set `AGENCY_NAME`, `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL` in `.env`; until then previews
+  show `[missing: …]`. Unsubscribe links point to `PUBLIC_BASE_URL/unsubscribe` and are signed, so
+  they work without a login; unsubscribes and complaints can never be removed from the suppression list.
+- **Funnels** — start from HVAC, plumbing, roofing, accounting or real-estate templates (generic copy,
+  bracketed placeholders, no invented reviews). The page must pass form/content checks (contact
+  field, labels, consent text, no placeholders left) and mobile checks before approval. After
+  approval, **Download HTML**, host it, connect the form to your form handler/CRM, and **Mark as
+  published** with the live URL. Any later edit needs approval again.
+
 ## Configuration
 
 All settings are environment variables (or `.env`). See [.env.example](.env.example). Key ones:
@@ -146,6 +172,8 @@ All settings are environment variables (or `.env`). See [.env.example](.env.exam
 | `ANTHROPIC_EFFORT` | `medium` | `low`–`max`; Claude's reasoning depth (cost vs. quality) |
 | `LLM_TIMEOUT_SECONDS` / `LLM_MAX_RETRIES` | `120` / `2` | Per provider call; the orchestrator adds its own bounded retry (2 attempts per task) |
 | `ORCHESTRATOR_MAX_SUBTASKS` / `ORCHESTRATOR_MAX_DEPTH` | `5` / `2` | Delegation limits enforced in Python |
+| `AGENCY_NAME`, `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL` | empty | Sender identity filled into email drafts |
+| `PUBLIC_BASE_URL` | `http://localhost:8000` | Base for unsubscribe links |
 | `ENABLE_DEMO_LOGIN` | `false` | Development only |
 
 ## Project layout
@@ -157,6 +185,8 @@ agencyos/
 │   │   ├── api/v1/        route handlers (auth, dashboard, health, settings, ceo, agents, tasks, approvals,
 │   │   │                  prospects, clients, projects)
 │   │   ├── agents/        BaseAgent, CEOAgent + 10 specialists, registry, Pydantic I/O schemas
+│   │   ├── approvals/     approval gate used by campaigns and funnels
+│   │   ├── marketing/     email compliance, funnel templates, landing-page renderer/validator
 │   │   ├── orchestrator/  state machine, delegation policy, engine, runners
 │   │   ├── providers/     mock, OpenAI, Anthropic adapters; pricing
 │   │   ├── config/        settings (pydantic-settings)
@@ -203,5 +233,8 @@ agencyos/
   models choose from the agent descriptions.
 - Duplicate detection compares phone numbers in Python over at most 500 candidate rows, which is
   fine for a small agency's pipeline but would need an indexed phone column at larger scale.
+- Funnel previews load in a sandboxed iframe. If your browser blocks it, use "Open preview in a new tab".
+- AI drafts are linked to campaigns/funnels by scanning the latest 500 agent tasks; fine for one agency,
+  would need an indexed link column at larger scale.
 - Approving an action records the decision only. Sending, publishing and ad integrations arrive
   in later phases and will act only on approved requests.

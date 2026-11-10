@@ -217,6 +217,25 @@ class MockLLMProvider:
 
     @staticmethod
     def _spec_funnel(topic: str, data: dict[str, Any]):
+        funnel = data.get("funnel")
+        if funnel:  # structured copy request from a funnel page
+            current = funnel.get("current_copy") or {}
+            industry = funnel.get("industry") or "local service"
+            return (
+                [
+                    {"title": "Headline", "kind": "copy",
+                     "content": current.get("headline") or f"Fast, reliable {industry.lower()} help when you need it"},
+                    {"title": "Subheadline", "kind": "copy",
+                     "content": current.get("subheadline") or "Tell us what you need and we'll get back to you quickly."},
+                    {"title": "Benefits", "kind": "copy",
+                     "content": "\n".join(current.get("benefits") or ["Clear pricing before work starts",
+                                                                      "Friendly, local team", "Easy scheduling"])},
+                    {"title": "Proof", "kind": "copy", "content": "[customer review]"},
+                    {"title": "Call to action", "kind": "copy", "content": funnel.get("call_to_action") or "Get started"},
+                ],
+                ["Replace [customer review] with a real review before publishing."],
+                [],
+            )
         return (
             [{"title": "Landing page outline", "kind": "page_outline",
               "content": (
