@@ -20,6 +20,8 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 _settings = get_settings()
 login_limiter = RateLimiter(_settings.login_rate_limit_per_minute)
+# Failed logins per account, so one account can't be guessed at from many IP addresses.
+account_limiter = RateLimiter(_settings.login_account_limit, _settings.login_account_window_seconds)
 api_limiter = RateLimiter(_settings.api_rate_limit_per_minute)
 
 

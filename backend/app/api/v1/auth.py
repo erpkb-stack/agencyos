@@ -10,6 +10,7 @@ from app.schemas.auth import (
     DemoLoginStatus,
     LoginRequest,
     LoginResponse,
+    UpdateUserRequest,
     UserOut,
 )
 from app.security.deps import (
@@ -135,3 +136,10 @@ def create_user(
         db, email=body.email, full_name=body.full_name, password=body.password,
         role=body.role, actor=actor,
     )
+
+
+@router.patch("/users/{user_id}", response_model=UserOut)
+def update_user(user_id: int, body: UpdateUserRequest, db: Session = Depends(get_db),
+                actor: User = Depends(require_admin)) -> User:
+    """Activate/deactivate a user or change their role. Deactivation signs them out everywhere."""
+    return auth_service.update_user(db, actor, user_id, is_active=body.is_active, role=body.role)

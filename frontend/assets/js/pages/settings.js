@@ -1,6 +1,6 @@
 // Settings: profile, password change, system status, user management (founder/admin).
 import { api, showFormError } from "../api.js";
-import { el, fmt, statusBadge, toast } from "../ui.js";
+import { confirmDialog, el, fmt, statusBadge, toast } from "../ui.js";
 
 function kv(rows) {
   return el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
@@ -40,18 +40,31 @@ function passwordCard() {
 
 function usersCard(currentUser) {
   const tbody = el("tbody");
-  const table = el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["Name", "Email", "Role", "Status", "Last login"].map((h) => el("th", {}, h)))), tbody));
+  const table = el("div", { class: "table-wrap" }, el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["Name", "Email", "Role", "Status", "Last login", ""].map((h) => el("th", {}, h)))), tbody));
+  const privileged = ["FOUNDER", "ADMIN"];
+  const canManage = (u) => u.id !== currentUser.id && (currentUser.role === "FOUNDER" || !privileged.includes(u.role));
 
   async function loadUsers() {
     try {
       const users = await api("/auth/users");
       tbody.replaceChildren(
         ...users.map((u) =>
-          el("tr", {}, el("td", {}, u.full_name), el("td", {}, u.email), el("td", {}, fmt.label(u.role)), el("td", {}, statusBadge(u.is_active ? "ACTIVE" : "PAUSED")), el("td", {}, fmt.datetime(u.last_login_at))),
+          el("tr", {}, el("td", {}, u.full_name), el("td", {}, u.email), el("td", {}, fmt.label(u.role)), el("td", {}, statusBadge(u.is_active ? "ACTIVE" : "INACTIVE")), el("td", {}, fmt.datetime(u.last_login_at)),
+            el("td", {}, canManage(u) ? el("button", { class: "btn btn-sm", type: "button", onclick: async () => {
+              const deactivate = u.is_active;
+              if (deactivate && !(await confirmDialog({ title: `Deactivate ${u.full_name}?`, message: "They are signed out everywhere and can't sign in until reactivated. Their records stay.", confirmLabel: "Deactivate" }))) return;
+              try {
+                await api(`/auth/users/${u.id}`, { method: "PATCH", body: { is_active: !deactivate } });
+                toast(deactivate ? "User deactivated" : "User reactivated", "success");
+                loadUsers();
+              } catch (err) {
+                toast(err.message, "error");
+              }
+            } }, u.is_active ? "Deactivate" : "Reactivate") : null)),
         ),
       );
     } catch (err) {
-      tbody.replaceChildren(el("tr", {}, el("td", { colspan: "5" }, err.message)));
+      tbody.replaceChildren(el("tr", {}, el("td", { colspan: "6" }, err.message)));
     }
   }
 
@@ -124,7 +137,9 @@ export function renderSettings({ view, user, system }) {
         ["Demo login", system.demo_login_enabled ? "Enabled (development)" : "Disabled"],
         ["External sending", system.external_sending_enabled ? "Enabled" : "Disabled — drafts only"],
         ["Session length", `${system.session_ttl_hours} hours`],
+        ["API docs (/docs)", system.api_docs_enabled ? "On" : "Off"],
       ]),
+      system.warnings?.length ? el("div", { class: "notice notice-warning mt-16" }, el("strong", {}, "Configuration warnings"), el("ul", { class: "list-plain" }, system.warnings.map((w) => el("li", {}, w)))) : el("p", { class: "small score-high mt-16" }, "✓ No configuration warnings."),
       el("p", { class: "field-hint mt-16" }, "Configuration is read from the .env file on the server. API keys are never sent to the browser."),
     ),
   );
@@ -134,6 +149,6 @@ export function renderSettings({ view, user, system }) {
     el("div", { class: "page-head" }, el("div", {}, el("h1", {}, "Settings"), el("p", { class: "muted" }, "Your account, team and system configuration."))),
     el("div", { class: "grid two-col mb-16" }, profile, passwordCard()),
     el("div", { class: "grid mb-16" }, sys),
-    isAdmin ? usersCard(user) : null,
+    ...(isAdmin ? [usersCard(user)] : []),
   );
 }

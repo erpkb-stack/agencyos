@@ -36,6 +36,21 @@ class RateLimiter:
                 self._hits = {k: v for k, v in self._hits.items() if v and v[-1] > cutoff}
             return True
 
+    def exceeded(self, key: str) -> bool:
+        """True if ``key`` is at its limit right now (does not record a hit)."""
+        cutoff = time.monotonic() - self.window
+        with self._lock:
+            hits = self._hits.get(key)
+            if not hits:
+                return False
+            while hits and hits[0] <= cutoff:
+                hits.popleft()
+            return len(hits) >= self.limit
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._hits.pop(key, None)
+
     def reset(self) -> None:
         with self._lock:
             self._hits.clear()

@@ -104,6 +104,17 @@ def register_exception_handlers(app: FastAPI) -> None:
             headers=getattr(exc, "headers", None),
         )
 
+    from sqlalchemy.exc import IntegrityError
+
+    @app.exception_handler(IntegrityError)
+    async def _integrity(request: Request, exc: IntegrityError) -> JSONResponse:
+        # A constraint fired (e.g. a duplicate created concurrently). Details stay in the log.
+        logger.warning("Integrity error", extra={"request_id": _request_id(request)})
+        return JSONResponse(
+            error_body("conflict", "This change conflicts with existing data", _request_id(request)),
+            status_code=409,
+        )
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled error", extra={"request_id": _request_id(request)})

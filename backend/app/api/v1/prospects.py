@@ -44,8 +44,15 @@ def list_prospects(filters: dict = Depends(_filters), page: int = Query(1, ge=1)
 
 @router.get("/export")
 def export_prospects(filters: dict = Depends(_filters), db: Session = Depends(get_db),
-                     _: User = Depends(get_current_user)) -> Response:
+                     user: User = Depends(get_current_user)) -> Response:
     rows, _total = prospect_service.search(db, **filters, offset=0, limit=10_000)
+    # Exports contain personal data: record who exported what.
+    from app.models.enums import ActorType
+    from app.services import audit_service
+
+    audit_service.record(db, "prospect.exported", user=user, actor_type=ActorType.USER, entity_type="prospect",
+                         summary=f"Exported {len(rows)} prospect(s) to CSV")
+    db.commit()
     return Response(
         content=prospect_service.export_csv(rows), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="prospects-{date.today().isoformat()}.csv"'},

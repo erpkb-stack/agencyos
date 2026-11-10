@@ -251,7 +251,8 @@ AGENT_CLASSES: dict[str, type[BaseAgent]] = {
         AdvertisingAgent, AutomationAgent, ClientSuccessAgent, FinanceAgent, AnalyticsAgent,
     )},
 }
-assert set(AGENT_CLASSES) == set(SPECS_BY_KEY), "every built-in spec needs an agent class"
+if set(AGENT_CLASSES) != set(SPECS_BY_KEY):  # pragma: no cover - guards future edits to the registry
+    raise RuntimeError("Every built-in agent spec needs an agent class")
 
 
 def agent_class_for(key: str) -> type[BaseAgent]:

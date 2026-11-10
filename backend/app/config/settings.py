@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     login_rate_limit_per_minute: int = Field(default=10, ge=1)
     api_rate_limit_per_minute: int = Field(default=300, ge=1)
     enable_demo_login: bool = False
+    # Interactive API docs (/docs, /openapi.json). Default: on except in production.
+    enable_api_docs: bool | None = None
+    # Largest request body accepted (bytes). CSV imports are capped separately at 2 MB.
+    max_request_bytes: int = Field(default=5 * 1024 * 1024, ge=64 * 1024, le=100 * 1024 * 1024)
+    # Failed logins allowed per account in the window before that account is throttled.
+    login_account_limit: int = Field(default=5, ge=1, le=100)
+    login_account_window_seconds: int = Field(default=900, ge=60, le=86400)
 
     # Database
     database_url: str = f"sqlite:///{DATA_DIR / 'agencyos.db'}"
@@ -122,6 +129,29 @@ class Settings(BaseSettings):
     @property
     def database_backend(self) -> str:
         return self.database_url.split(":", 1)[0].split("+", 1)[0]
+
+    @property
+    def api_docs_enabled(self) -> bool:
+        return (not self.is_production) if self.enable_api_docs is None else self.enable_api_docs
+
+    def production_warnings(self) -> list[str]:
+        """Non-fatal issues worth fixing before real use. Shown in Settings and logged at start."""
+        warnings: list[str] = []
+        if self.is_production:
+            if self.database_backend == "sqlite":
+                warnings.append("SQLite is fine for one person on one machine; use PostgreSQL for a shared server.")
+            if not self.public_base_url.startswith("https://"):
+                warnings.append("PUBLIC_BASE_URL should use https:// so unsubscribe links are secure.")
+            if not self.secure_cookies:
+                warnings.append("COOKIE_SECURE is off; session cookies would be sent over plain HTTP.")
+        provider = self.llm_provider.value
+        if provider == "openai" and not self.openai_api_key:
+            warnings.append("LLM_PROVIDER=openai but OPENAI_API_KEY is not set; agent tasks will fail.")
+        if provider == "anthropic" and not self.anthropic_api_key:
+            warnings.append("LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set; agent tasks will fail.")
+        if not (self.agency_name and self.agency_address and self.sender_name):
+            warnings.append("Agency identity (AGENCY_NAME, AGENCY_ADDRESS, SENDER_NAME) is incomplete; email drafts show [missing: …].")
+        return warnings
 
 
 @lru_cache

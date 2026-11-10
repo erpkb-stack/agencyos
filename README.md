@@ -3,12 +3,13 @@
 Internal platform for running an AI-assisted marketing and automation agency: Founder dashboard,
 AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and approvals.
 
-**Status: Phases 1–5 complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics). Phase 6 (production hardening) is next. See
+**Status: all six phases complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics,
+Production readiness). [![CI](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml/badge.svg)](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml) See
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the phase roadmap.
 
 | Works now | Coming next |
 |---|---|
-| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 6: Production hardening |
+| Login/logout, roles, sessions, CSRF, rate limiting (per IP and per account), audit log | |
 | Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | |
 | **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | |
 | **11 agents** (CEO + 10 specialists) with editable prompts/models, custom agents, test runs, execution history | |
@@ -100,27 +101,43 @@ if the flag is on.
 ## Tests
 
 ```bash
-./scripts/test.sh
+./scripts/test.sh                       # all tests
+./scripts/test.sh --cov=app             # with coverage
 ```
 
 Tests use a fresh temporary SQLite database for each test and never call external services.
+Set `TEST_DATABASE_URL=postgresql+psycopg://…` to run the same suite on PostgreSQL (the database is
+wiped, so use an empty one). CI runs SQLite with a 90% coverage gate, PostgreSQL, Bandit,
+pip-audit and a Docker build + smoke test on every pull request.
 
-## Docker
-
-```bash
-cp .env.example .env    # set SECRET_KEY first
-docker compose up --build
-```
-
-The container applies migrations on start and keeps the database in the `agencyos-data` volume.
-Create the Founder login inside the container:
+## Docker and production
 
 ```bash
+cp .env.example .env    # set APP_ENV=production, SECRET_KEY, PUBLIC_BASE_URL, provider key
+docker compose up -d --build
 docker compose exec agencyos python -m app.cli create-user --email you@youragency.com --name "Your Name" --role FOUNDER
 ```
 
-> Docker is not installed on the development Mac this was built on, so the Docker path has not
-> been run yet. The native Python path is fully tested.
+The image runs in production mode by default, applies migrations on start, listens on
+`127.0.0.1:8000`, and keeps data in the `agencyos-data` volume. Put an HTTPS reverse proxy in front.
+Full guide (checklist, Caddy/nginx, PostgreSQL, backups, upgrades, monitoring):
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. Security review: **[docs/SECURITY.md](docs/SECURITY.md)**.
+
+> Docker isn't installed on the Mac this was built on; the image is built and smoke-tested by CI
+> on every pull request (see the CI badge).
+
+## Command line
+
+Run from `backend/` with `../.venv/bin/python -m app.cli …` (or `docker compose exec agencyos python -m app.cli …`):
+
+| Command | What it does |
+|---|---|
+| `init-db` | Apply migrations and add missing built-in agents |
+| `create-user --email … --name … [--role FOUNDER]` | Create a login (prompts for the password) |
+| `reset-password --email …` | Set a new password; signs the user out everywhere |
+| `set-active --email … --active/--inactive` | Reactivate / deactivate a user |
+| `backup-db [--dest DIR] [--keep 14]` | Consistent SQLite backup with integrity check |
+| `check-config` | Show configuration and production warnings |
 
 ## Business records (Phase 3)
 
@@ -191,7 +208,11 @@ All settings are environment variables (or `.env`). See [.env.example](.env.exam
 | `LLM_TIMEOUT_SECONDS` / `LLM_MAX_RETRIES` | `120` / `2` | Per provider call; the orchestrator adds its own bounded retry (2 attempts per task) |
 | `ORCHESTRATOR_MAX_SUBTASKS` / `ORCHESTRATOR_MAX_DEPTH` | `5` / `2` | Delegation limits enforced in Python |
 | `AGENCY_NAME`, `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL` | empty | Sender identity filled into email drafts |
-| `PUBLIC_BASE_URL` | `http://localhost:8000` | Base for unsubscribe links |
+| `PUBLIC_BASE_URL` | `http://localhost:8000` | Base for unsubscribe links (use https in production) |
+| `ENABLE_API_DOCS` | on except production | `/docs` and `/openapi.json` |
+| `MAX_REQUEST_BYTES` | `5242880` | Larger request bodies get 413 |
+| `LOGIN_ACCOUNT_LIMIT` / `LOGIN_ACCOUNT_WINDOW_SECONDS` | `5` / `900` | Failed logins per account before throttling |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Docker: reverse-proxy address trusted for client IPs |
 | `ENABLE_DEMO_LOGIN` | `false` | Development only |
 
 ## Project layout
@@ -242,9 +263,8 @@ agencyos/
 - Invoices have no tax lines or currencies other than USD. Refunds are not modelled; delete or adjust
   the payment instead (Founder/Admin).
 - SQLite stores `NUMERIC` as REAL; money is rounded to cents in Python. PostgreSQL stores exact values.
-- No forgotten-password flow yet (nothing is emailed in v1). Signed-in users can change their own
-  password under Settings; an admin reset command is planned for Phase 6.
-- Docker files are written but not yet run on this machine.
+- No self-service forgotten-password flow (nothing is emailed). Use `app.cli reset-password`.
+- No multi-factor authentication yet (see docs/SECURITY.md).
 - The OpenAI and Anthropic adapters are tested against fake SDK clients only; no live call has
   been made from this machine (no keys configured).
 - Tasks run one at a time on a single background thread. A long real-model request delays the

@@ -33,7 +33,7 @@ from app.database.session import build_engine, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.enums import UserRole  # noqa: E402
 from app.models.identity import User  # noqa: E402
-from app.security.deps import api_limiter, login_limiter  # noqa: E402
+from app.security.deps import account_limiter, api_limiter, login_limiter  # noqa: E402
 from app.security.passwords import hash_password  # noqa: E402
 from app.security.tokens import CSRF_COOKIE, CSRF_HEADER  # noqa: E402
 from app.orchestrator import get_task_runner  # noqa: E402
@@ -44,11 +44,22 @@ from app.providers.mock import MockLLMProvider  # noqa: E402
 PASSWORD = "Correct-Horse-42"
 
 
+# Set TEST_DATABASE_URL (e.g. postgresql+psycopg://…) to run the whole suite against PostgreSQL.
+# The database is wiped before each test, so never point it at real data.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+
+
 @pytest.fixture
 def engine(tmp_path: Path):
-    eng = build_engine(f"sqlite:///{tmp_path / 'test.db'}")
+    if TEST_DATABASE_URL:
+        eng = build_engine(TEST_DATABASE_URL)
+        Base.metadata.drop_all(eng)
+    else:
+        eng = build_engine(f"sqlite:///{tmp_path / 'test.db'}")
     Base.metadata.create_all(eng)
     yield eng
+    if TEST_DATABASE_URL:
+        Base.metadata.drop_all(eng)
     eng.dispose()
 
 
@@ -96,6 +107,7 @@ def client(session_factory, orchestrator) -> Iterator[TestClient]:
     app.dependency_overrides[get_task_runner] = lambda: InlineRunner(orchestrator)
     login_limiter.reset()
     api_limiter.reset()
+    account_limiter.reset()
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
     app.dependency_overrides.clear()

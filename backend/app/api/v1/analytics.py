@@ -28,8 +28,14 @@ def get_report(key: str, start: date | None = None, end: date | None = None, db:
 
 @router.get("/reports/{key}/csv")
 def report_csv(key: str, start: date | None = None, end: date | None = None, db: Session = Depends(get_db),
-               _: User = Depends(get_current_user)) -> Response:
+               user: User = Depends(get_current_user)) -> Response:
     report = report_service.build(db, key, start, end)
+    from app.models.enums import ActorType
+    from app.services import audit_service
+
+    audit_service.record(db, "report.exported", user=user, actor_type=ActorType.USER, entity_type="report",
+                         summary=f"Exported '{report['title']}' ({report['period']['start']} to {report['period']['end']}) to CSV")
+    db.commit()
     filename = f"{key}-{report['period']['start']}-{report['period']['end']}.csv"
     return Response(report_service.to_csv(report), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
