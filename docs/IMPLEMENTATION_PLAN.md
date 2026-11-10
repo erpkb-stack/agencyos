@@ -46,6 +46,7 @@ Environment facts that shape the plan:
 | **4 — Marketing** ✅ | Campaigns, email templates/sequences, suppression list, funnels, landing-page generation + preview | Drafts only; approval required for any send/publish |
 | **5 — Finance & analytics** ✅ | Revenue, expenses, invoices, payments, reports, CSV export, agent performance | Money math tested with Decimal |
 | **6 — Production readiness** ✅ | Security review, coverage, Docker, deployment docs | Full suite green |
+| **7 — Parallel agents & queue** ✅ | Concurrent specialists, durable DB-backed task queue with separate-worker option, per-request and monthly AI cost limits | Same 3-agent request faster with a real model; queue survives restarts; limits enforced before every call |
 
 ### Phase 1 task list
 
@@ -154,6 +155,19 @@ Environment facts that shape the plan:
       and smoke test
 - [x] docs/DEPLOYMENT.md (checklist, Compose, Caddy/nginx, PostgreSQL, backups, upgrades,
       monitoring) and docs/SECURITY.md
+
+### Phase 7 task list
+
+- [x] Sub-tasks of a CEO request run in parallel (own DB session per thread, configurable width,
+      failures isolated); SQLite busy timeout for concurrent writes
+- [x] Durable queue: atomic claim by conditional UPDATE, priority order, `QueueWorker` in-process or
+      `app.cli worker`; restart recovery re-queues interrupted requests once
+- [x] Budgets: per-request and monthly estimated-cost limits checked before every model call and
+      at task creation; request cost on task pages; limits and month spend in Settings
+- [x] "Queued" phase in the UI
+- [x] Tests: parallelism (peak concurrency), isolation of failures, budget stops, monthly cap,
+      atomic claiming under contention, priority order, worker draining a queue after a restart
+- [x] Live check with Claude Opus 5.5: same three-agent request 234 s → 98 s ($0.42)
 
 ## Technical risks
 

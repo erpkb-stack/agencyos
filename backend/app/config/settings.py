@@ -6,6 +6,7 @@ All settings come from environment variables or ``agencyos/.env``. Nothing secre
 from __future__ import annotations
 
 import secrets
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -91,6 +92,17 @@ class Settings(BaseSettings):
     # Orchestrator limits (enforced in Python, not by the model)
     orchestrator_max_subtasks: int = Field(default=5, ge=1, le=10)
     orchestrator_max_depth: int = Field(default=2, ge=1, le=3)
+    # Specialists of one CEO request that may run at the same time.
+    orchestrator_parallel_agents: int = Field(default=3, ge=1, le=8)
+    # Queued requests processed at the same time by a worker.
+    task_workers: int = Field(default=2, ge=1, le=8)
+    # Run the queue worker inside the web process (default). Set false and run
+    # `python -m app.cli worker` separately to keep agent work out of the web process.
+    run_worker_in_process: bool = True
+    worker_poll_seconds: float = Field(default=2.0, ge=0.2, le=60)
+    # Estimated AI spend limits in USD (0 = no limit).
+    ai_cost_limit_per_request: Decimal = Field(default=Decimal("2.00"), ge=0, max_digits=10, decimal_places=2)
+    ai_cost_limit_per_month: Decimal = Field(default=Decimal("0"), ge=0, max_digits=10, decimal_places=2)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

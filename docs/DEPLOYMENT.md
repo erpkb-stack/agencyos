@@ -7,9 +7,10 @@ AgencyOS is an internal tool for one agency. The supported shapes are:
 | **Your Mac** (native Python) | SQLite | One person, local use. See the README quick start |
 | **One server with Docker Compose** | SQLite or PostgreSQL | A small team reaching it over HTTPS |
 
-Run **one app process**. Background agent tasks and rate limiting live in that process, so add
-CPU/RAM rather than replicas. (A worker queue and shared rate limiter are the path to more
-processes; the code is structured for that, but it is not built.)
+Run **one web process** (rate limiting is in-memory). Agent work runs from a durable database
+queue: by default inside the web process, or in its own process with `RUN_WORKER_IN_PROCESS=false`
+and `python -m app.cli worker` (run exactly one worker process; it handles `TASK_WORKERS` requests
+at a time). Queued work survives restarts.
 
 ---
 
@@ -28,6 +29,8 @@ Before anyone other than you uses it:
       `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL`) filled in
 - [ ] A Founder account created from the command line, and its password stored in a password manager
 - [ ] Backups scheduled and a restore tested (section 5)
+- [ ] AI spending limits reviewed: `AI_COST_LIMIT_PER_REQUEST` (default $2) and, ideally,
+      `AI_COST_LIMIT_PER_MONTH`
 - [ ] `python -m app.cli check-config` prints no warnings (the same list appears under
       **Settings → System status**)
 

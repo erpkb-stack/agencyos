@@ -72,13 +72,21 @@ BaseAgent
 - Task state machine: `PENDING → ASSIGNED → RUNNING → (COMPLETED | FAILED | AWAITING_APPROVAL)`,
   `AWAITING_APPROVAL → (COMPLETED | CANCELLED)`, any non-terminal → `CANCELLED`,
   `FAILED → PENDING` (retry, bounded). Transitions are checked in one function.
-- Execution runs in-process on a single background worker thread (`ThreadRunner`, one worker keeps
-  SQLite writes serial). The API only calls `runner.submit(task_id)`; tests use `InlineRunner`.
-  A worker queue is another runner, with no change to callers. On start-up, tasks left
-  `PENDING`/`ASSIGNED`/`RUNNING` by a previous process are marked `FAILED` ("interrupted"), so
-  nothing looks busy forever; the user can Retry them.
+- **Execution (Phase 7).** The database is the queue: a task waiting to run is `PENDING`. A
+  `QueueWorker` claims tasks with a conditional `UPDATE … WHERE status='PENDING'` (so two workers,
+  in threads or separate processes, can never take the same task), most urgent first, and runs up to
+  `TASK_WORKERS` requests at once. It runs inside the web process by default or alone via
+  `python -m app.cli worker`. API calls only `runner.submit(task_id)` (which just wakes the worker);
+  tests use `InlineRunner`. On start-up, running sub-tasks are failed and running top-level
+  requests are re-queued once (`recover_interrupted`); queued tasks are left to run.
+- **Parallel specialists.** The CEO's accepted sub-tasks run concurrently in a thread pool
+  (`ORCHESTRATOR_PARALLEL_AGENTS`), each with its own database session; one failing sub-task does
+  not affect its siblings. SQLite waits up to 30 s for write locks (WAL mode).
+- **Budgets.** `orchestrator/budget.py` checks the request's estimated spend (root + sub-tasks) and
+  the month's spend before every model call, including the CEO summary; a breach fails that call
+  with a clear, non-retryable error. The monthly cap also refuses new requests at creation (409).
 - Flow for a CEO request: root task (CEO) → plan call → plan validated in Python → child tasks
-  (depth 1) run one after another → CEO summary call → assistant message posted to the
+  (depth 1) run in parallel → CEO summary call → assistant message posted to the
   conversation. If the summary call fails, a plain summary is built in Python and labelled as such.
 - Specialists with `read_business_data` receive a read-only KPI snapshot from the database in their
   untrusted data block, so financial and status answers use real figures.

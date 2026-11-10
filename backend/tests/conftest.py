@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import atexit
 import os
+import shutil
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
 # Configure the environment before the app (and its cached settings) is imported.
 _TMP = Path(tempfile.mkdtemp(prefix="agencyos-tests-"))
+atexit.register(shutil.rmtree, _TMP, True)  # don't leave a temp folder behind per run
 os.environ.update(
     {
         "APP_ENV": "test",

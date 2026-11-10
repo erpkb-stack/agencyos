@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
@@ -25,6 +26,7 @@ from app.models.approvals import Approval
 from app.models.enums import (
     ActorType, ApprovalStatus, ExecutionStatus, MessageRole, TaskPriority, TaskStatus as S,
 )
+from app.orchestrator import budget
 from app.orchestrator.policy import validate_plan
 from app.orchestrator.state import transition
 from app.providers import ProviderFactory
@@ -83,7 +85,8 @@ class Orchestrator:
     def run(self, task_id: int) -> None:
         with self.session_factory() as db:
             task = db.get(AgentTask, task_id)
-            if task is None or task.status != S.PENDING:
+            # PENDING when run directly (InlineRunner); ASSIGNED when a queue worker claimed it.
+            if task is None or task.status not in (S.PENDING, S.ASSIGNED):
                 return
             try:
                 if task.agent is not None and task.agent.key == CEO_KEY:
@@ -131,6 +134,7 @@ class Orchestrator:
             task.attempts += 1
             db.commit()
             try:
+                budget.check_before_call(db, self.settings, task)
                 result = call()
             except (AgentError, ProviderError) as exc:
                 if self._cancelled(db, task):
@@ -171,6 +175,38 @@ class Orchestrator:
                 summary=f"{task.agent.name} requested approval: {action.title}",
             )
         return len(output.proposed_actions)
+
+    # -- parallel sub-tasks ----------------------------------------------------------------
+
+    def _run_child(self, root_id: int, child_id: int) -> None:
+        """Run one sub-task in its own session (sessions are not shared across threads)."""
+        with self.session_factory() as db:
+            root = db.get(AgentTask, root_id)
+            child = db.get(AgentTask, child_id)
+            if root is None or child is None or root.status == S.CANCELLED or child.status not in (S.PENDING, S.ASSIGNED):
+                return
+            try:
+                self._run_specialist(db, child)
+            except Exception:  # noqa: BLE001 - one failing sub-task must not take down its siblings
+                logger.exception("Sub-task %s crashed", child_id)
+                db.rollback()
+                child = db.get(AgentTask, child_id)
+                if child is not None and child.status in (S.ASSIGNED, S.RUNNING):
+                    if child.status == S.ASSIGNED:
+                        transition(child, S.RUNNING)
+                    transition(child, S.FAILED)
+                    child.error = "Internal orchestrator error (details are in the server log)"
+                    db.commit()
+
+    def _run_children(self, root_id: int, child_ids: list[int]) -> None:
+        workers = min(self.settings.orchestrator_parallel_agents, len(child_ids))
+        if workers <= 1:
+            for cid in child_ids:
+                self._run_child(root_id, cid)
+            return
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix=f"agencyos-req{root_id}") as pool:
+            for future in [pool.submit(self._run_child, root_id, cid) for cid in child_ids]:
+                future.result()
 
     # -- specialist ------------------------------------------------------------------------
 
@@ -322,10 +358,8 @@ class Orchestrator:
             db.commit()
             return
 
-        for child in children:
-            if self._cancelled(db, root):
-                return
-            self._run_specialist(db, child)
+        db.commit()
+        self._run_children(root.id, [c.id for c in children])
 
         if self._cancelled(db, root):
             return
@@ -345,6 +379,7 @@ class Orchestrator:
             })
 
         try:
+            budget.check_before_call(db, self.settings, root)
             synth = ceo.synthesize(request_text, results, DbRecorder(db, root, ceo_agent))
             final: dict[str, Any] = synth.output.model_dump(mode="json")
         except AgentError as exc:

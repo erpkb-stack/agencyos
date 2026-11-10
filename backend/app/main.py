@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1.router import api_router
 from app.config.settings import APP_VERSION, FRONTEND_DIR, get_settings
 from app.middleware import RequestContextMiddleware
-from app.orchestrator import shutdown_runner
+from app.orchestrator import shutdown_runner, start_runner
 from app.utils.errors import NotFoundError, register_exception_handlers
 from app.utils.logging import configure_logging
 
@@ -34,8 +34,9 @@ def _startup_housekeeping(logger: logging.Logger) -> None:
                 return
             added = agent_service.ensure_seeded(db)
             recovered = recover_interrupted(db)
-        if added or recovered:
-            logger.info(f"Startup: {added} built-in agents added, {recovered} interrupted tasks marked failed")
+        if added or any(recovered.values()):
+            logger.info(f"Startup: {added} built-in agents added; interrupted tasks: "
+                        f"{recovered['requeued']} re-queued, {recovered['failed']} marked failed")
     except Exception:  # noqa: BLE001 - never block startup on housekeeping
         logger.exception("Startup housekeeping failed")
 
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
         for warning in settings.production_warnings():
             logger.warning(f"Configuration: {warning}")
         _startup_housekeeping(logger)
+        start_runner()  # resume queued agent work right away (no-op if the worker runs separately)
         yield
         shutdown_runner()
         logger.info("AgencyOS stopped")

@@ -184,6 +184,7 @@ async function renderTaskDetail(ctx, id) {
             ["Status", statusBadge(t.phase)],
             ["Priority", fmt.label(t.priority)],
             ["Attempts", `${t.attempts} of ${t.max_attempts}`],
+            ["Request cost (est.)", t.request_root_id === t.id ? `$${t.request_cost}` : el("span", {}, `$${t.request_cost} for the whole `, el("a", { href: `#/tasks/${t.request_root_id}` }, "request"))],
             ["Delegation depth", String(t.depth)],
             ["Conversation", t.conversation_id ? el("a", { href: `#/ceo/${t.conversation_id}` }, `Open #${t.conversation_id}`) : "—"],
             ["Created", fmt.datetime(t.created_at)],
