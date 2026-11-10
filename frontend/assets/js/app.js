@@ -14,6 +14,8 @@ import { renderProjects } from "./pages/projects.js";
 import { renderCampaigns } from "./pages/campaigns.js";
 import { renderEmail } from "./pages/email.js";
 import { renderFunnels } from "./pages/funnels.js";
+import { renderFinance } from "./pages/finance.js";
+import { renderAnalytics } from "./pages/analytics.js";
 
 // `phase` > 1 means the module is not built yet; its route shows the roadmap page.
 // Built modules use phase 1 so no "P" badge is shown.
@@ -31,8 +33,8 @@ export const MODULES = [
   { id: "email", label: "Email Marketing", icon: "✉", phase: 1, render: renderEmail },
   { id: "funnels", label: "Funnels", icon: "⏷", phase: 1, render: renderFunnels },
   { section: "Operations" },
-  { id: "finance", label: "Finance", icon: "$", phase: 5 },
-  { id: "analytics", label: "Analytics", icon: "◔", phase: 5 },
+  { id: "finance", label: "Finance", icon: "$", phase: 1, render: renderFinance },
+  { id: "analytics", label: "Analytics", icon: "◔", phase: 1, render: renderAnalytics },
   { id: "approvals", label: "Approvals", icon: "✓", phase: 1, render: renderApprovals },
   { id: "settings", label: "Settings", icon: "⚙", phase: 1, render: renderSettings },
 ];

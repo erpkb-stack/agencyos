@@ -3,13 +3,13 @@
 Internal platform for running an AI-assisted marketing and automation agency: Founder dashboard,
 AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and approvals.
 
-**Status: Phases 1–4 complete** (Foundation, AI CEO, Business management, Marketing). See
+**Status: Phases 1–5 complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics). Phase 6 (production hardening) is next. See
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the phase roadmap.
 
 | Works now | Coming next |
 |---|---|
-| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 5: Finance and analytics |
-| Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | Phase 6: Production hardening |
+| Login/logout, roles, sessions, CSRF, rate limiting, audit log | Phase 6: Production hardening |
+| Founder dashboard: 11 KPIs, 5 charts, activity feeds — all from the database | |
 | **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | |
 | **11 agents** (CEO + 10 specialists) with editable prompts/models, custom agents, test runs, execution history | |
 | **Prospects**: pipeline with search/filter/sort, duplicate detection, CSV import/export, activity timeline, convert to client, "Ask Sales Agent" | |
@@ -18,12 +18,13 @@ AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and a
 | **Campaigns**: email and ad campaigns, AI drafts (strategy, sequences, ad copy), audience from prospects, approval gate, budget-change approvals, manual metrics + AI analysis | |
 | **Email marketing**: template library, compliance checks, personalised preview, suppression list, signed unsubscribe links, recipient-list check | |
 | **Funnels**: 5 industry templates, form builder, landing-page HTML with sandboxed desktop/mobile preview, form + mobile validation, publish approval, HTML download | |
+| **Finance**: invoices (from client fees, printable), payments (drive paid status), revenue, expenses, AI-usage cost, profit, MRR, outstanding/overdue, client profitability estimate, 12-month chart | |
+| **Analytics**: 9 reports (daily activity, weekly CEO, monthly business, prospects, sales conversion, campaigns, project progress, finance, agents) with CSV export and AI summaries | |
 | **Task orchestration**: state machine, retries, cancellation, delegation limits, token + cost tracking | |
 | **Approvals**: every external action an agent proposes waits for a Founder/Admin decision | |
 | Providers: offline Mock (default), OpenAI, Anthropic | |
 
-Sidebar items for unbuilt modules are marked `P5`; they open a page that says the module is
-not built yet. There are no placeholder buttons.
+Every sidebar module is built. There are no placeholder buttons.
 
 ## Using the AI CEO
 
@@ -158,6 +159,23 @@ you run the approved work in your own tools and record the outcome.
   approval, **Download HTML**, host it, connect the form to your form handler/CRM, and **Mark as
   published** with the live URL. Any later edit needs approval again.
 
+## Finance and analytics (Phase 5)
+
+- **Cash basis.** Revenue is money received. Recording a payment creates its revenue entry;
+  deleting the payment removes it. Manual revenue (no invoice) is Founder/Admin only.
+- **Invoices** start as drafts (from line items or from a client's agreed monthly/setup fee),
+  are numbered `INV-YYYY-NNNN`, and can be printed to PDF from the browser. "Mark as sent" only
+  records that *you* sent it. **Paid / partially paid comes only from recorded payments**;
+  overpayments and future-dated payments are refused; invoices with payments can't be voided.
+- **Numbers**: total revenue, expenses, gross profit and margin, MRR (active clients' monthly
+  fees), outstanding and overdue balances, and a client profitability **estimate** (revenue −
+  AI cost of the client's project work − shared expenses allocated by revenue share).
+- **AI usage**: estimated monthly AI cost from recorded agent calls (list prices); record the
+  billed amount as an AI_API expense.
+- **Reports** are built only from AgencyOS records, cover a chosen period (days follow the
+  server's time zone), export to CSV (spreadsheet-formula safe) and can be summarised by the
+  Analytics Agent, which only reads the report. PDF export of reports is not implemented yet.
+
 ## Configuration
 
 All settings are environment variables (or `.env`). See [.env.example](.env.example). Key ones:
@@ -195,7 +213,7 @@ agencyos/
 │   │   ├── schemas/       Pydantic request/response models
 │   │   ├── security/      passwords, tokens, rate limiter, auth dependencies
 │   │   ├── services/      business logic (auth, audit, dashboard, agents, tasks/approvals,
-│   │   │                  prospects, clients, projects)
+│   │   │                  prospects, clients, projects, campaigns, email, funnels, finance, reports)
 │   │   ├── utils/         errors, logging, time
 │   │   ├── middleware.py  request ID, security headers, access log
 │   │   ├── cli.py         init-db, create-user
@@ -220,7 +238,9 @@ agencyos/
 
 ## Known limitations
 
-- Rate limiting is in-memory, so it applies per process. Use a shared store if you run several workers.
+- Rate limiting is in-memory (sliding window), so it applies per process. Use a shared store if you run several workers.
+- Invoices have no tax lines or currencies other than USD. Refunds are not modelled; delete or adjust
+  the payment instead (Founder/Admin).
 - SQLite stores `NUMERIC` as REAL; money is rounded to cents in Python. PostgreSQL stores exact values.
 - No forgotten-password flow yet (nothing is emailed in v1). Signed-in users can change their own
   password under Settings; an admin reset command is planned for Phase 6.

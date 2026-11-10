@@ -140,6 +140,6 @@ async function renderClient(ctx, id) {
       c.invoices.length || c.payments.length
         ? el("div", {}, table(["Invoice", "Status", "Total", "Issued", "Due"], c.invoices.map((i) => el("tr", {}, el("td", {}, i.number), el("td", {}, statusBadge(i.status)), el("td", {}, fmt.money(i.total)), el("td", {}, i.issue_date ?? "—"), el("td", {}, i.due_date ?? "—"))), "No invoices."),
             table(["Payment", "Amount", "Method"], c.payments.map((p) => el("tr", {}, el("td", {}, p.paid_on), el("td", {}, fmt.money(p.amount)), el("td", {}, p.method ?? "—"))), "No payments."))
-        : el("div", { class: "card-body empty-inline" }, "No invoices or payments recorded. Invoicing arrives with Finance in Phase 5.")),
+        : el("div", { class: "card-body empty-inline" }, "No invoices or payments recorded yet. Create them under ", el("a", { href: "#/finance/invoices" }, "Finance → Invoices"), ".")),
   );
 }

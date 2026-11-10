@@ -89,7 +89,7 @@ function emptyBanner() {
         {},
         el("li", {}, "Now — ", el("a", { href: "#/ceo" }, "ask the AI CEO"), " for research and plans; agent runs appear under Agent task performance."),
         el("li", {}, "Now — ", el("a", { href: "#/prospects" }, "add prospects"), " (manually or by CSV) and clients to populate the pipeline and conversion charts."),
-        el("li", {}, "Phase 5 — record revenue and expenses to populate the revenue chart."),
+        el("li", {}, "Now — ", el("a", { href: "#/finance/invoices" }, "invoice clients and record payments"), " to populate the revenue chart."),
       ),
     ),
   );

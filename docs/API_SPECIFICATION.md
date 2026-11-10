@@ -192,9 +192,42 @@ Nothing here sends email, launches ads or publishes pages. "Request approval" en
 | POST | `/funnels/{id}/published` | `{landing_page_url}` after hosting (APPROVED → PUBLISHED) |
 | POST | `/funnels/{id}/generate` · `/funnels/{id}/import/{task_id}` | Funnel Agent copy (Headline, Subheadline, Benefits, Proof, Call to action) and import |
 
+## Phase 5 endpoints (implemented)
+
+Money is a decimal string with two places. Period parameters `start`/`end` are ISO dates.
+
+### Finance
+| Method | Path | Description |
+|---|---|---|
+| GET | `/finance/summary?start&end` | Revenue, expenses, gross profit, margin, MRR, outstanding, overdue, by-category totals, `monthly` 12-month series, `profitability` rows |
+| GET/POST | `/finance/revenue` | List (filters) / add manual revenue (FOUNDER/ADMIN) |
+| PATCH/DELETE | `/finance/revenue/{id}` | Manual entries only; payment-linked revenue is changed via its payment |
+| GET/POST | `/finance/expenses` | List / add (STAFF+) |
+| PATCH/DELETE | `/finance/expenses/{id}` | Update (STAFF+) / soft delete (FOUNDER/ADMIN) |
+| GET | `/finance/ai-usage?month=YYYY-MM` | Estimated AI cost by provider/model from executions, and AI expenses already recorded |
+| POST | `/finance/ai-usage/expense` | `{month, amount, vendor}` → AI_API expense |
+| GET/POST | `/finance/invoices` | List (`status`, `client_id`, `overdue`) / create draft `{client_id, items[], issue_date, due_date, notes}` |
+| POST | `/finance/invoices/from-client/{client_id}` | Draft from the client's monthly fee (and setup fee if requested) |
+| GET/PATCH/DELETE | `/finance/invoices/{id}` | Detail with items and payments; edit/delete drafts only |
+| POST | `/finance/invoices/{id}/mark-sent` | DRAFT → SENT (records that you sent it) |
+| POST | `/finance/invoices/{id}/void` | FOUNDER/ADMIN; refused when payments exist |
+| GET | `/finance/invoices/{id}/print` | Printable HTML (escaped, own CSP) |
+| GET/POST | `/finance/payments` | List / record `{invoice_id? , client_id?, amount, paid_on, method, reference, category}`; creates revenue and updates invoice status |
+| DELETE | `/finance/payments/{id}` | FOUNDER/ADMIN; removes its revenue and recalculates the invoice |
+
+### Analytics
+| Method | Path | Description |
+|---|---|---|
+| GET | `/analytics/reports` | Report types with default periods |
+| GET | `/analytics/reports/{key}?start&end` | `{key, title, period, kpis[], sections[{title, columns, rows, note?}]}` |
+| GET | `/analytics/reports/{key}/csv` | CSV attachment of the same report |
+| POST | `/analytics/reports/{key}/summarize` | Draft-only Analytics Agent task over the report → 202 |
+| GET | `/analytics/summaries` | Recent report-summary tasks |
+
+Report keys: `daily_activity`, `weekly_ceo`, `monthly_business`, `prospect_performance`,
+`sales_conversion`, `campaign_performance`, `project_progress`, `financial_summary`, `agent_performance`.
+
 ## Planned endpoints (later phases)
 
 | Prefix | Phase | Main operations |
 |---|---|---|
-| `/finance` | 5 | revenue, expenses, invoices (+items), payments, `GET /summary`, `GET /reports/monthly` |
-| `/analytics` | 5 | daily / weekly / monthly reports, agent performance, `?format=csv` export |

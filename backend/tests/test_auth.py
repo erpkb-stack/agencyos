@@ -224,3 +224,17 @@ def test_timestamps_are_serialized_with_utc_offset(founder_client: TestClient):
     me = founder_client.get("/api/v1/auth/me").json()
     assert me["last_login_at"].endswith("Z") or me["last_login_at"].endswith("+00:00")
     assert me["created_at"].endswith("Z") or me["created_at"].endswith("+00:00")
+
+
+def test_rate_limiter_is_a_sliding_window(monkeypatch):
+    from app.security import rate_limit
+
+    clock = [1000.0]
+    monkeypatch.setattr(rate_limit.time, "monotonic", lambda: clock[0])
+    limiter = rate_limit.RateLimiter(limit=3, window_seconds=60)
+    assert [limiter.hit("ip") for _ in range(4)] == [True, True, True, False]
+    clock[0] += 59  # still inside the window: a clock-minute boundary must not reset it
+    assert limiter.hit("ip") is False
+    clock[0] += 2  # the first hits have aged out
+    assert limiter.hit("ip") is True
+    assert limiter.hit("other") is True
