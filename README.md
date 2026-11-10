@@ -3,8 +3,8 @@
 Internal platform for running an AI-assisted marketing and automation agency: Founder dashboard,
 AI CEO with specialised agents, CRM, projects, campaigns, funnels, finance and approvals.
 
-**Status: Phases 1–7 complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics,
-Production readiness, Parallel agents & task queue). [![CI](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml/badge.svg)](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml) See
+**Status: Phases 1–8 complete** (Foundation, AI CEO, Business management, Marketing, Finance & analytics,
+Production readiness, Parallel agents & task queue, Prospect website research). [![CI](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml/badge.svg)](https://github.com/erpkb-stack/agencyos/actions/workflows/ci.yml) See
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the phase roadmap.
 
 | Works now | Coming next |
@@ -14,6 +14,7 @@ Production readiness, Parallel agents & task queue). [![CI](https://github.com/e
 | **AI CEO chat**: persistent conversations; the CEO plans and delegates to specialists, live status per agent | |
 | **11 agents** (CEO + 10 specialists) with editable prompts/models, custom agents, test runs, execution history | |
 | **Prospects**: pipeline with search/filter/sort, duplicate detection, CSV import/export, activity timeline, convert to client, "Ask Sales Agent" | |
+| **Website research**: safe checks of prospects' public sites (one or bulk), factual lead-conversion signals, "Find conversion problems" ranking by the Sales Agent | |
 | **Clients**: contract status, fees, projects, deliverables, invoices/payments view, activity | |
 | **Projects**: status workflow, tasks with assignees/due dates/dependencies, comments, deliverables, timeline, progress from tasks, "Send to agent" | |
 | **Campaigns**: email and ad campaigns, AI drafts (strategy, sequences, ad copy), audience from prospects, approval gate, budget-change approvals, manual metrics + AI analysis | |
@@ -140,6 +141,25 @@ Run from `backend/` with `../.venv/bin/python -m app.cli …` (or `docker compos
 | `check-config` | Show configuration and production warnings |
 | `worker` | Run the agent task queue in its own process (with `RUN_WORKER_IN_PROCESS=false`) |
 
+## Prospect website research (Phase 8)
+
+- **Check website** (prospect page) reads the prospect's public site: the homepage plus up to two
+  relevant pages (contact, booking, services…). **Check websites** (prospect list) queues checks for
+  everything matching your filters (up to 50) in the background.
+- Facts are extracted in Python, not by an AI: HTTPS, mobile setup, contact form, click-to-call,
+  online booking, live chat, analytics, review mentions, search description, calls to action,
+  copyright year, response time. They become plain-language **possible lead-conversion issues**
+  and a heuristic 0–100 gap score. **Add findings to observations** writes them onto the prospect.
+- **Find conversion problems** asks the Sales Agent to rank checked prospects by likely lead loss,
+  using only those facts. **Ask Sales Agent** now includes the latest website facts too. Site text
+  reaches agents only as untrusted data.
+- **Contact details found on a site are never copied** into records or given to agents; only whether
+  a phone number or email is shown.
+- **Safety**: http/https and ports 80/443 only; the site must resolve to public internet addresses
+  (private, loopback, link-local and cloud-metadata addresses are refused, including via redirects);
+  robots.txt is respected for the user agent `AgencyOS-Research/1.0 (+PUBLIC_BASE_URL)`; at most one
+  request per second per site; 10 s timeout and 1.5 MB per page; HTML/text only.
+
 ## Agent speed, queue and spending limits (Phase 7)
 
 - **Parallel specialists.** A CEO request's specialists run at the same time (up to
@@ -229,6 +249,9 @@ All settings are environment variables (or `.env`). See [.env.example](.env.exam
 | `TASK_WORKERS` | `2` | Requests processed at the same time |
 | `RUN_WORKER_IN_PROCESS` | `true` | `false` + `python -m app.cli worker` runs agent work in its own process |
 | `AI_COST_LIMIT_PER_REQUEST` / `AI_COST_LIMIT_PER_MONTH` | `2.00` / `0` | Estimated USD; 0 = no limit. Checked before every model call |
+| `WEB_RESEARCH_ENABLED` | `true` | Prospect website checks |
+| `WEB_RESEARCH_MAX_PAGES` / `WEB_RESEARCH_TIMEOUT_SECONDS` | `3` / `10` | Pages per site, seconds per request |
+| `WEB_RESEARCH_CONCURRENCY` / `WEB_RESEARCH_BULK_LIMIT` | `3` / `50` | Background checks at once / per bulk request |
 | `AGENCY_NAME`, `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL` | empty | Sender identity filled into email drafts |
 | `PUBLIC_BASE_URL` | `http://localhost:8000` | Base for unsubscribe links (use https in production) |
 | `ENABLE_API_DOCS` | on except production | `/docs` and `/openapi.json` |
@@ -291,6 +314,9 @@ agencyos/
   been made from this machine (no keys configured).
 - The mock provider routes requests by keywords, so its choice of agents is approximate. Real
   models choose from the agent descriptions.
+- Website checks are heuristics from public HTML (no JavaScript is run), so sites built entirely in
+  JavaScript may show fewer features than they have. DNS could change between the address check and
+  the connection (DNS rebinding); if that matters, run AgencyOS where the network blocks internal services.
 - Duplicate detection compares phone numbers in Python over at most 500 candidate rows, which is
   fine for a small agency's pipeline but would need an indexed phone column at larger scale.
 - Funnel previews load in a sandboxed iframe. If your browser blocks it, use "Open preview in a new tab".

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import CheckConstraint, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, IdMixin, SoftDeleteMixin, TimestampMixin, str_enum
-from app.models.enums import ContractStatus, SalesStage
+from app.models.enums import ContractStatus, SalesStage, WebsiteCheckStatus
 from app.utils.time import utcnow
 
 
@@ -86,3 +87,27 @@ class Client(IdMixin, TimestampMixin, SoftDeleteMixin, Base):
     monthly_fee: Mapped[Decimal] = mapped_column(default=Decimal("0.00"))
     setup_fee: Mapped[Decimal] = mapped_column(default=Decimal("0.00"))
     notes: Mapped[str | None] = mapped_column(Text)
+
+
+class WebsiteCheck(IdMixin, Base):
+    """A fetch of a prospect's public website and the facts extracted from it (Phase 8)."""
+
+    __tablename__ = "prospect_website_checks"
+
+    prospect_id: Mapped[int] = mapped_column(ForeignKey("prospects.id", ondelete="CASCADE"), index=True)
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[WebsiteCheckStatus] = mapped_column(
+        str_enum(WebsiteCheckStatus, "website_check_status"), default=WebsiteCheckStatus.QUEUED, index=True
+    )
+    url: Mapped[str] = mapped_column(String(500))
+    final_url: Mapped[str | None] = mapped_column(String(500))
+    http_status: Mapped[int | None] = mapped_column(default=None)
+    title: Mapped[str | None] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text)
+    signals: Mapped[dict[str, Any] | None] = mapped_column(default=None)
+    pages: Mapped[list[Any] | None] = mapped_column(default=None)
+    text_excerpt: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    duration_ms: Mapped[int | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(default=None)

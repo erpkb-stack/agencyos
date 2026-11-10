@@ -34,6 +34,11 @@ def _startup_housekeeping(logger: logging.Logger) -> None:
                 return
             added = agent_service.ensure_seeded(db)
             recovered = recover_interrupted(db)
+            from app.services import research_service
+
+            resumed = research_service.resume_queued(db)
+            if resumed:
+                logger.info(f"Startup: resumed {resumed} website check(s)")
         if added or any(recovered.values()):
             logger.info(f"Startup: {added} built-in agents added; interrupted tasks: "
                         f"{recovered['requeued']} re-queued, {recovered['failed']} marked failed")

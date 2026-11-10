@@ -181,6 +181,21 @@ class MockLLMProvider:
     @staticmethod
     def _spec_sales(topic: str, data: dict[str, Any]):
         prospects = data.get("prospects") or []
+        checked = [p for p in prospects if p.get("website_check")]
+        if checked:
+            ranked = sorted(checked, key=lambda p: -(p["website_check"].get("facts", {}).get("conversion_gap_score") or 0))
+            lines = []
+            for i, p in enumerate(ranked, 1):
+                wc = p["website_check"]
+                issues = wc.get("possible_conversion_issues") or ["no obvious issues found"]
+                lines.append(f"{i}. {p.get('company_name', 'Unnamed')} (gap score "
+                             f"{wc.get('facts', {}).get('conversion_gap_score', 0)}): " + "; ".join(issues[:4]))
+            return (
+                [{"title": "Lead-conversion review (from website checks)", "kind": "report",
+                  "content": "Ranked by likely lead loss, using only the website facts provided:\n" + "\n".join(lines)}],
+                ["Start outreach with the highest-ranked prospects and lead with their top issue."],
+                [],
+            )
         if prospects:
             rows = "\n".join(f"- {p.get('company_name', 'Unnamed')}: {p.get('notes', 'no notes')}" for p in prospects[:20])
             content = f"Prospects supplied ({len(prospects)}):\n{rows}"
