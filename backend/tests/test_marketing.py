@@ -46,7 +46,8 @@ def seed_prospects(c: TestClient) -> None:
     for i, email in enumerate(["owner@alpha.com", "info@bravo.com", "hi@charlie.com"]):
         r = c.post(f"{API}/prospects", json={"company_name": f"Prospect {i}", "industry": "HVAC", "city": "Austin",
                                              "email": email, "contact_name": "Pat Lee", "stage": "QUALIFIED",
-                                             "website": f"p{i}.com"})
+                                             "website": f"p{i}.com",
+                                             "observations": "your site has no online booking"})
         assert r.status_code == 201, r.text
     c.post(f"{API}/emails/suppressions", json={"email": "info@bravo.com", "reason": "UNSUBSCRIBED"})
 
@@ -58,7 +59,16 @@ def make_campaign(c: TestClient, **kw) -> dict:
     return r.json()
 
 
+def _identity(c: TestClient, **kw) -> None:
+    """Tests must not depend on the developer's .env."""
+    values = dict(agency_name="Test Agency", agency_address="1 Main St, Austin, TX 78701", sender_name="Sam Sender",
+                  sender_email="sam@agency.example", public_base_url="https://os.agency.example")
+    s = get_settings().model_copy(update={**values, **kw})
+    c.app.dependency_overrides[get_settings] = lambda: s
+
+
 def test_email_campaign_end_to_end(founder_client: TestClient, db):
+    _identity(founder_client)
     seed_prospects(founder_client)
     camp = make_campaign(founder_client)
     base = f"{API}/campaigns/{camp['id']}"
@@ -92,7 +102,7 @@ def test_email_campaign_end_to_end(founder_client: TestClient, db):
     assert camp["status"] == "AWAITING_APPROVAL" and all(e["status"] == "AWAITING_APPROVAL" for e in camp["emails"])
     approval = founder_client.get(f"{API}/approvals/{r.json()['approval_id']}").json()
     assert approval["action_type"] == "SEND_EMAIL" and approval["entity_type"] == "campaign"
-    assert "2 eligible recipients (1 suppressed address excluded); 3 emails" in approval["payload"]["details"]
+    assert "Send 6 emails to 2 recipients (3 steps each; 1 do-not-contact address excluded)" in approval["payload"]["details"]
 
     locked = founder_client.patch(f"{API}/emails/templates/{emails[0]['id']}", json={"subject": "New subject"})
     assert locked.status_code == 400
@@ -158,6 +168,7 @@ def test_staff_requests_but_cannot_approve_and_admin_cannot_self_approve(client:
 
 
 def test_email_templates_preview_and_check(founder_client: TestClient):
+    _identity(founder_client, agency_name="", agency_address="", sender_name="")
     r = founder_client.post(f"{API}/emails/templates", json={"name": "Intro", "subject": "Hello {{first_name}}",
                                                              "body_text": GOOD_BODY})
     t = r.json()

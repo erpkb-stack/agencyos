@@ -49,6 +49,7 @@ Environment facts that shape the plan:
 | **7 — Parallel agents & queue** ✅ | Concurrent specialists, durable DB-backed task queue with separate-worker option, per-request and monthly AI cost limits | Same 3-agent request faster with a real model; queue survives restarts; limits enforced before every call |
 | **8 — Prospect website research** ✅ | Safe public-site fetcher, factual conversion signals, single and bulk checks, Sales Agent conversion review | No SSRF to private addresses; robots.txt honoured; no contact details copied |
 | **9 — Two-factor sign-in & sessions** ✅ | TOTP 2FA with recovery codes, optional policy for admins, active-session list and sign-out | Codes verified against RFC 6238 vectors; no session after the password alone; replay refused |
+| **10 — Approved email sending** ✅ | SMTP sending of approved campaigns: frozen outbox, start/pause/cancel, follow-up timing, stop rules, limits, test sends, one-click unsubscribe | Nothing sendable without approval + start; suppressed and replied prospects skipped; tests use a fake transport |
 
 ### Phase 1 task list
 
@@ -197,6 +198,19 @@ Environment facts that shape the plan:
 - [x] Tests: vectors, window/replay, enrolment, login, throttling, password change, disable,
       regeneration, policy, sessions, CLI
 
+### Phase 10 task list
+
+- [x] Migration 0004: `email_messages` (rendered, frozen outbox)
+- [x] Outbox built at approval request; incomplete merge fields and do-not-contact excluded
+- [x] Approve → scheduled; reject/edit → cancelled; start/pause/cancel/complete wired to sending
+- [x] Background sender: atomic claim, daily limit and interval, retries with backoff, bounce →
+      do-not-contact, follow-ups timed from the previous send, stop on reply/unsubscribe,
+      interrupted sends never re-sent, campaign completes when nothing is left
+- [x] SMTP transport (STARTTLS/SSL, verified TLS), List-Unsubscribe + one-click, test mode redirect
+- [x] Test sends to your own address; Settings → Email sending status
+- [x] UI: Outbox on the campaign page, Start/Pause sending, Test to me
+- [x] Tests with a fake transport and patched smtplib; tests no longer read the developer's .env
+
 ## Technical risks
 
 | Risk | Mitigation |
@@ -205,6 +219,6 @@ Environment facts that shape the plan:
 | In-memory rate limiter is per-process | Acceptable for a single local process; documented; swap for Redis when running multiple workers |
 | LLM output is non-deterministic and may be malformed | Phase 2: JSON schema validation, bounded retries, mark task FAILED rather than guess |
 | Prompt injection from prospect websites/emails | Phase 2: untrusted content is passed as quoted data, never merged into system prompts; tool permissions enforced in Python |
-| Accidental real email/ad spend | No send/publish code paths exist in v1; approval rows only |
+| Accidental real email/ad spend | Ads: no launch code. Email: off by default; needs approval and an explicit start; daily limit; test-mode redirect; tests never use a live mailbox |
 | Docker unavailable locally | Native Python path is the primary run mode; Docker files kept simple |
 | Scope creep across 13 modules | Strict phase gates; a phase ends only with green tests |

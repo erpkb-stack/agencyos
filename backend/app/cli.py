@@ -155,7 +155,7 @@ def worker() -> int:
     import threading
 
     from app.database.session import SessionLocal as Session_
-    from app.orchestrator import build_worker
+    from app.orchestrator import build_email_sender, build_worker
     from app.orchestrator.runner import recover_interrupted
 
     settings = get_settings()
@@ -168,8 +168,10 @@ def worker() -> int:
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     queue = build_worker().start()
+    sender = build_email_sender().start()
     stop.wait()
     print("Stopping worker; running tasks will be re-queued on next start.", flush=True)
+    sender.shutdown()
     queue.shutdown(wait=False)
     return 0
 

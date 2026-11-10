@@ -1,5 +1,5 @@
 """Email content: templates and sequence drafts, compliance, personalisation preview, audience
-segments, suppression list and unsubscribe handling. Nothing is ever sent from here."""
+segments, suppression list and unsubscribe handling. Sending lives in `email_sending`."""
 
 from __future__ import annotations
 
@@ -64,6 +64,14 @@ def _guard_campaign_edit(db: Session, user: User, campaign: Campaign | None) -> 
         campaign.status = CampaignStatus.DRAFT
         for t in db.scalars(select(EmailTemplate).where(EmailTemplate.campaign_id == campaign.id)):
             t.status = ContentStatus.DRAFT
+        from sqlalchemy import update
+
+        from app.models.enums import EmailMessageStatus as MS
+        from app.models.marketing import EmailMessage
+
+        db.execute(update(EmailMessage).where(EmailMessage.campaign_id == campaign.id,
+                                              EmailMessage.status.in_((MS.PENDING_APPROVAL, MS.SCHEDULED)))
+                   .values(status=MS.CANCELLED, error="An email was edited after approval", updated_at=utcnow()))
         audit_service.record(db, "campaign.reopened", user=user, actor_type=ActorType.USER, entity_type="campaign",
                              entity_id=campaign.id, summary=f"Email edited after approval; '{campaign.name}' needs approval again")
 
@@ -121,13 +129,36 @@ def delete(db: Session, user: User, t: EmailTemplate) -> None:
 # -- personalisation ---------------------------------------------------------------------------
 
 
+def public_links(settings: Settings) -> bool:
+    """True when PUBLIC_BASE_URL can be reached by recipients (not localhost / a private address)."""
+    import ipaddress
+    from urllib.parse import urlparse
+
+    host = (urlparse(settings.public_base_url).hostname or "").lower()
+    if not host or host == "localhost" or host.endswith((".local", ".localhost", ".internal", ".test")):
+        return False
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return True
+
+
+def unsubscribe_targets(settings: Settings, email: str) -> tuple[str | None, str | None]:
+    """(one-click URL, mailto). Without a public URL, opt-outs arrive as replies to SENDER_EMAIL."""
+    from urllib.parse import quote, urlencode
+
+    mailto = f"mailto:{settings.sender_email}?subject={quote('Unsubscribe')}" if settings.sender_email else None
+    if not public_links(settings):
+        return None, mailto
+    token = compliance.unsubscribe_token(email, settings.secret_key)
+    return f"{settings.public_base_url.rstrip('/')}/unsubscribe?{urlencode({'e': email, 't': token})}", mailto
+
+
 def agency_values(settings: Settings, recipient_email: str | None) -> dict[str, str | None]:
     unsub = None
     if recipient_email:
-        token = compliance.unsubscribe_token(recipient_email, settings.secret_key)
-        from urllib.parse import urlencode
-
-        unsub = f"{settings.public_base_url.rstrip('/')}/unsubscribe?{urlencode({'e': recipient_email, 't': token})}"
+        url, mailto = unsubscribe_targets(settings, recipient_email)
+        unsub = url or mailto
     return {"sender_name": settings.sender_name or None, "sender_email": settings.sender_email or None,
             "agency_name": settings.agency_name or None, "agency_address": settings.agency_address or None,
             "unsubscribe_link": unsub}
@@ -235,8 +266,8 @@ def check_recipients(db: Session, emails: list[str]) -> dict[str, Any]:
     return {"eligible": ok, "suppressed": blocked, "invalid": invalid, "duplicates": dupes}
 
 
-def segment(db: Session, audience: dict[str, Any]) -> dict[str, Any]:
-    """Count prospects matching the filter and how many can lawfully be emailed (not suppressed)."""
+def segment_prospects(db: Session, audience: dict[str, Any]) -> dict[str, Any]:
+    """Prospects matching the filter; ``eligible`` have an email address that is not suppressed."""
     q = select(Prospect).where(Prospect.deleted_at.is_(None))
     if audience.get("stages"):
         q = q.where(Prospect.stage.in_(audience["stages"]))
@@ -246,12 +277,20 @@ def segment(db: Session, audience: dict[str, Any]) -> dict[str, Any]:
         q = q.where(func.lower(Prospect.city) == audience["city"].strip().lower())
     if audience.get("min_score") is not None:
         q = q.where(Prospect.lead_score >= audience["min_score"])
-    rows = list(db.scalars(q))
+    rows = list(db.scalars(q.order_by(Prospect.id)))
     suppressed = suppressed_set(db)
     with_email = [p for p in rows if p.email]
     eligible = [p for p in with_email if p.email.lower() not in suppressed]
+    return {"matched": len(rows), "with_email": len(with_email), "suppressed": len(with_email) - len(eligible),
+            "eligible": eligible}
+
+
+def segment(db: Session, audience: dict[str, Any]) -> dict[str, Any]:
+    """Count prospects matching the filter and how many can lawfully be emailed (not suppressed)."""
+    seg = segment_prospects(db, audience)
+    eligible = seg["eligible"]
     return {
-        "matched": len(rows), "with_email": len(with_email),
-        "suppressed": len(with_email) - len(eligible), "eligible": len(eligible),
+        "matched": seg["matched"], "with_email": seg["with_email"],
+        "suppressed": seg["suppressed"], "eligible": len(eligible),
         "sample": [{"id": p.id, "company_name": p.company_name, "city": p.city} for p in eligible[:10]],
     }

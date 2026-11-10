@@ -13,6 +13,7 @@ from app.models.enums import (
     CampaignType,
     ContentStatus,
     EmailKind,
+    EmailMessageStatus,
     FunnelStatus,
     SuppressionReason,
 )
@@ -68,6 +69,31 @@ class EmailSuppression(IdMixin, Base):
     )
     source: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class EmailMessage(IdMixin, TimestampMixin, Base):
+    """One email to one recipient: rendered and frozen when approval is requested, so exactly what
+    the approver reviewed is what gets sent."""
+
+    __tablename__ = "email_messages"
+
+    campaign_id: Mapped[int | None] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"), index=True)
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("email_templates.id", ondelete="SET NULL"))
+    prospect_id: Mapped[int | None] = mapped_column(ForeignKey("prospects.id", ondelete="SET NULL"), index=True)
+    approval_id: Mapped[int | None] = mapped_column(ForeignKey("approvals.id", ondelete="SET NULL"))
+    step: Mapped[int] = mapped_column(default=1)
+    delay_days: Mapped[int] = mapped_column(default=0)
+    to_email: Mapped[str] = mapped_column(String(255))
+    subject: Mapped[str] = mapped_column(String(300))
+    body_text: Mapped[str] = mapped_column(Text)
+    status: Mapped[EmailMessageStatus] = mapped_column(
+        str_enum(EmailMessageStatus, "email_message_status"), default=EmailMessageStatus.PENDING_APPROVAL, index=True
+    )
+    send_after: Mapped[datetime | None] = mapped_column(default=None, index=True)
+    attempts: Mapped[int] = mapped_column(default=0)
+    sent_at: Mapped[datetime | None] = mapped_column(default=None)
+    provider_message_id: Mapped[str | None] = mapped_column(String(300))
+    error: Mapped[str | None] = mapped_column(Text)
 
 
 class Funnel(IdMixin, TimestampMixin, SoftDeleteMixin, Base):

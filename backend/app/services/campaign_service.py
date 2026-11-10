@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import approvals as gate
+from app.config.settings import Settings, get_settings
 from app.marketing import compliance
 from app.models.approvals import Approval
 from app.models.crm import Client
@@ -24,7 +25,7 @@ from app.models.enums import (
 )
 from app.models.identity import User
 from app.models.marketing import Campaign, EmailTemplate
-from app.services import audit_service, drafting, email_service
+from app.services import audit_service, drafting, email_sending, email_service
 from app.utils.errors import AppError, NotFoundError
 from app.utils.time import utcnow
 
@@ -117,6 +118,7 @@ def serialize(db: Session, c: Campaign, *, full: bool = False) -> dict[str, Any]
             ai_tasks=[drafting.task_brief(t) for t in drafting.linked_tasks(db, "campaign", c.id)],
             allowed_status_changes=sorted(s.value for s in MANUAL_TRANSITIONS[c.status]),
             readiness=readiness(db, c),
+            outbox=email_sending.counts(db, c.id) if c.campaign_type in EMAIL_TYPES else None,
         )
     return out
 
@@ -228,7 +230,8 @@ def readiness(db: Session, c: Campaign) -> list[dict[str, str]]:
     return problems
 
 
-def request_approval(db: Session, user: User, c: Campaign, data: dict[str, Any]) -> Approval:
+def request_approval(db: Session, user: User, c: Campaign, data: dict[str, Any],
+                     settings: Settings | None = None) -> Approval:
     if c.status != CS.DRAFT:
         raise AppError("Only draft campaigns can be sent for approval")
     blocking = [p["message"] for p in readiness(db, c) if p["level"] == "error"]
@@ -241,18 +244,26 @@ def request_approval(db: Session, user: User, c: Campaign, data: dict[str, Any])
         if not data.get("confirm_compliance"):
             raise AppError("Confirm that sender details, postal address and unsubscribe are in every email")
         audience = (c.generated_content or {}).get("audience") or {}
-        seg = email_service.segment(db, audience)
-        extra.update(consent_basis=data["consent_basis"], audience=audience, eligible_recipients=seg["eligible"],
-                     suppressed_excluded=seg["suppressed"])
+        # Render every email for every recipient now: the approver reviews exactly what will be sent.
+        outbox = email_sending.build_outbox(db, settings or get_settings(), c, audience)
+        extra.update(consent_basis=data["consent_basis"], audience=audience,
+                     eligible_recipients=outbox["recipients"], suppressed_excluded=outbox["suppressed_excluded"],
+                     messages=outbox["messages"], incomplete_excluded=outbox["incomplete_excluded"])
         action = ApprovalActionType.SEND_EMAIL
-        n_emails = len(email_service.list_templates(db, c.id, None))
+
         def count(n: int, one: str, many: str) -> str:
             return f"{n} {one if n == 1 else many}"
 
-        details = (f"{count(seg['eligible'], 'eligible recipient', 'eligible recipients')} "
-                   f"({count(seg['suppressed'], 'suppressed address', 'suppressed addresses')} excluded); "
-                   f"{count(n_emails, 'email', 'emails')}; consent basis: "
-                   f"{CONSENT_LABELS[data['consent_basis']]}.")
+        details = (f"Send {count(outbox['messages'], 'email', 'emails')} to "
+                   f"{count(outbox['recipients'], 'recipient', 'recipients')} "
+                   f"({count(outbox['steps'], 'step', 'steps')} each; "
+                   f"{count(outbox['suppressed_excluded'], 'do-not-contact address', 'do-not-contact addresses')} "
+                   f"excluded")
+        if outbox["incomplete_excluded"]:
+            details += (f"; {count(outbox['incomplete_excluded'], 'recipient', 'recipients')} left out for missing "
+                        f"details, e.g. {outbox['incomplete_examples'][0]}")
+        details += (f"). Consent basis: {CONSENT_LABELS[data['consent_basis']]}. Every message can be read "
+                    f"on the campaign's Outbox before deciding.")
     elif c.campaign_type in AD_TYPES:
         action = ApprovalActionType.LAUNCH_ADS
         details = f"Launch {c.campaign_type.value.replace('_', ' ').title()} with budget {_money(c.budget)}."
@@ -266,6 +277,8 @@ def request_approval(db: Session, user: User, c: Campaign, data: dict[str, Any])
     c.status = CS.AWAITING_APPROVAL
     for t in email_service.list_templates(db, c.id, None):
         t.status = ContentStatus.AWAITING_APPROVAL
+    if action == ApprovalActionType.SEND_EMAIL:
+        email_sending.attach_approval(db, c, approval.id)
     return approval
 
 
@@ -284,6 +297,8 @@ def _on_decided(db: Session, approval: Approval) -> None:
         c.status = CS.APPROVED if approved else CS.DRAFT
         for t in email_service.list_templates(db, c.id, None):
             t.status = ContentStatus.APPROVED if approved else ContentStatus.DRAFT
+        if approval.action_type == ApprovalActionType.SEND_EMAIL:
+            email_sending.on_approval_settled(db, c, approval.status)
     _audit(db, None, c, "campaign.approval_settled",
            f"'{c.name}' {approval.action_type.value.lower()} {approval.status.value.lower()}; now {c.status.value.lower()}")
 
@@ -295,8 +310,14 @@ def change_status(db: Session, user: User, c: Campaign, new: CS, note: str | Non
     if new not in MANUAL_TRANSITIONS[c.status]:
         raise AppError(f"A {c.status.value.lower()} campaign cannot be marked {new.value.lower()}")
     old = c.status
+    sends = c.campaign_type in EMAIL_TYPES and email_sending.counts(db, c.id).get("SCHEDULED", 0) > 0
     c.status = new
-    suffix = " (launched outside AgencyOS; nothing was sent by this app)" if new == CS.ACTIVE else ""
+    email_sending.on_campaign_status(db, c, new)
+    if new == CS.ACTIVE:
+        suffix = (" (approved emails will now be sent)" if sends
+                  else " (launched outside AgencyOS; nothing was sent by this app)")
+    else:
+        suffix = ""
     _audit(db, user, c, "campaign.status", f"'{c.name}' {old.value} → {new.value}{suffix}" + (f". {note}" if note else ""))
     return c
 

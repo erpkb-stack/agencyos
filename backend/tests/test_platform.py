@@ -43,6 +43,10 @@ def test_security_headers(client: TestClient):
     assert r.headers["X-Frame-Options"] == "DENY"
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["Cache-Control"] == "no-store"
+    # Frontend files are revalidated on each load so upgrades show up without a hard refresh.
+    js = client.get("/assets/js/app.js")
+    assert js.headers["Cache-Control"] == "no-cache" and js.headers.get("etag")
+    assert client.get("/assets/js/app.js", headers={"If-None-Match": js.headers["etag"]}).status_code == 304
 
 
 def test_frontend_pages_served(client: TestClient):
@@ -69,7 +73,7 @@ def test_system_settings_never_expose_keys(founder_client: TestClient, monkeypat
     r = founder_client.get("/api/v1/settings/system")
     assert r.status_code == 200
     assert r.json()["llm"]["openai_configured"] is True
-    assert r.json()["external_sending_enabled"] is False
+    assert r.json()["external_sending_enabled"] is False  # EMAIL_TRANSPORT defaults to disabled
     assert "SECRET123" not in r.text
 
 

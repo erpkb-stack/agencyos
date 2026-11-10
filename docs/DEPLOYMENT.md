@@ -191,5 +191,10 @@ deactivated or demoted; nobody can change their own role or status.
 
 - One process (see above). SQLite is single-writer; fine for a small team, use PostgreSQL for more.
 - Request bodies are capped at 5 MB (`MAX_REQUEST_BYTES`); CSV imports at 2 MB / 5,000 rows.
-- AgencyOS never sends email, launches ads, hosts landing pages or charges cards. Approved work is
-  carried out in your own tools.
+- AgencyOS does not launch ads, host landing pages or charge cards. It sends email only for
+  approved campaigns that someone started, and only when `EMAIL_TRANSPORT=smtp` is configured.
+- Email sending runs where the task worker runs (the web process by default, or
+  `python -m app.cli worker`). Run one of them only. An email interrupted mid-send is marked
+  failed, not re-sent, because it may already have been delivered.
+- Unsubscribe links work only with a public `https://` `PUBLIC_BASE_URL`; on localhost, opt-outs
+  arrive as replies and must be added to Do-not-contact by hand.

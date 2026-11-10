@@ -22,6 +22,18 @@ os.environ.update(
         "OPENAI_API_KEY": "",
         "ANTHROPIC_API_KEY": "",
         "LOG_LEVEL": "WARNING",
+        # Environment variables win over .env: keep the developer's real identity and mail server
+        # out of the tests (tests that need them set their own values).
+        "AGENCY_NAME": "",
+        "AGENCY_ADDRESS": "",
+        "SENDER_NAME": "",
+        "SENDER_EMAIL": "",
+        "PUBLIC_BASE_URL": "http://localhost:8000",
+        "EMAIL_TRANSPORT": "disabled",
+        "SMTP_HOST": "",
+        "SMTP_USERNAME": "",
+        "SMTP_PASSWORD": "",
+        "EMAIL_REDIRECT_TO": "",
     }
 )
 

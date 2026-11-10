@@ -110,7 +110,7 @@ def create_app() -> FastAPI:
         return FileResponse(FRONTEND_DIR / "login.html")
 
     # Public unsubscribe page reached from links in emails. No login: the HMAC token proves the link.
-    from fastapi import Depends, Form
+    from fastapi import Depends, Form, Query
     from fastapi.responses import HTMLResponse
     from sqlalchemy.orm import Session
 
@@ -144,7 +144,11 @@ def create_app() -> FastAPI:
         ))
 
     @app.post("/unsubscribe", include_in_schema=False, dependencies=[Depends(enforce_api_rate_limit)])
-    def _unsubscribe(e: str = Form(""), t: str = Form(""), db: Session = Depends(get_db)) -> HTMLResponse:
+    def _unsubscribe(e: str = Form(""), t: str = Form(""), qe: str = Query("", alias="e"),
+                     qt: str = Query("", alias="t"), db: Session = Depends(get_db)) -> HTMLResponse:
+        # The form posts e/t in the body; mail apps' one-click unsubscribe (RFC 8058) POSTs to the
+        # List-Unsubscribe URL, so e/t arrive in the query string.
+        e, t = e or qe, t or qt
         if not email_service.unsubscribe(db, settings, e, t):
             return _page("Link not valid", "<p class=\"muted\">This unsubscribe link is incomplete or invalid.</p>")
         db.commit()

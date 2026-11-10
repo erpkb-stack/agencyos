@@ -144,6 +144,16 @@ class ContentStatus(StrEnum):
     APPROVED = "APPROVED"
 
 
+class EmailMessageStatus(StrEnum):
+    PENDING_APPROVAL = "PENDING_APPROVAL"  # frozen for review; nothing can be sent yet
+    SCHEDULED = "SCHEDULED"  # approved; sent once due (send_after) while the campaign is ACTIVE
+    SENDING = "SENDING"  # claimed by the sender
+    SENT = "SENT"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"  # not sent on purpose (unsubscribed, replied, earlier step not sent)
+    CANCELLED = "CANCELLED"  # approval rejected or campaign stopped
+
+
 class SuppressionReason(StrEnum):
     UNSUBSCRIBED = "UNSUBSCRIBED"
     BOUNCED = "BOUNCED"

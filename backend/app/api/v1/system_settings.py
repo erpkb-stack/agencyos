@@ -45,7 +45,8 @@ def system_info(
         },
         "demo_login_enabled": settings.demo_login_enabled,
         "session_ttl_hours": settings.session_ttl_hours,
-        "external_sending_enabled": False,
+        # Email only (Phase 10), and only for approved campaigns; ads are never launched from AgencyOS.
+        "external_sending_enabled": settings.email_transport == "smtp" and bool(settings.smtp_host and settings.sender_email),
         "api_docs_enabled": settings.api_docs_enabled,
         "warnings": settings.production_warnings(),
     }

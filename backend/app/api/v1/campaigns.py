@@ -3,15 +3,16 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.config.settings import Settings, get_settings
 from app.database.session import get_db
-from app.models.enums import CampaignStatus, CampaignType
+from app.models.enums import CampaignStatus, CampaignType, EmailMessageStatus
 from app.models.identity import User
 from app.orchestrator import TaskRunner, get_task_runner
 from app.schemas.marketing import (
     AudienceFilter, CampaignApprovalIn, CampaignCreate, CampaignStatusIn, CampaignUpdate, GenerateIn, MetricsIn,
 )
 from app.security.deps import get_current_user, require_writer
-from app.services import campaign_service
+from app.services import campaign_service, email_sending
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -97,9 +98,10 @@ def remove_draft(campaign_id: int, index: int, db: Session = Depends(get_db), us
 
 @router.post("/{campaign_id}/request-approval")
 def request_approval(campaign_id: int, body: CampaignApprovalIn, db: Session = Depends(get_db),
+                     settings: Settings = Depends(get_settings),
                      user: User = Depends(require_writer)) -> dict[str, Any]:
     c = campaign_service.get(db, campaign_id)
-    approval = campaign_service.request_approval(db, user, c, body.model_dump())
+    approval = campaign_service.request_approval(db, user, c, body.model_dump(), settings)
     db.commit()
     return {"approval_id": approval.id, "campaign": campaign_service.serialize(db, c, full=True)}
 
@@ -110,6 +112,17 @@ def change_status(campaign_id: int, body: CampaignStatusIn, db: Session = Depend
     c = campaign_service.change_status(db, user, campaign_service.get(db, campaign_id), CampaignStatus(body.status), body.note)
     db.commit()
     return campaign_service.serialize(db, c, full=True)
+
+
+@router.get("/{campaign_id}/outbox")
+def outbox(campaign_id: int, status_filter: EmailMessageStatus | None = Query(None, alias="status"),
+           page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
+           db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Every rendered email of this campaign, exactly as it was (or will be) sent."""
+    c = campaign_service.get(db, campaign_id)
+    items, total = email_sending.list_messages(db, c.id, status_filter, (page - 1) * page_size, page_size)
+    return {"items": items, "total": total, "page": page, "page_size": page_size,
+            "counts": email_sending.counts(db, c.id)}
 
 
 @router.put("/{campaign_id}/metrics")
