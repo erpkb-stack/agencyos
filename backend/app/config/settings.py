@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     agency_address: str = ""
     sender_name: str = ""
     sender_email: str = ""
-    public_base_url: str = "http://localhost:8000"
+    public_base_url: str = "http://localhost:8090"
 
     # Email sending (Phase 10). Nothing is sent unless EMAIL_TRANSPORT=smtp AND a campaign was approved
     # and started. EMAIL_REDIRECT_TO sends every email to that one address instead (for testing).
