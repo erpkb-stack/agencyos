@@ -77,8 +77,8 @@ Start the app:
 ./scripts/run_dev.sh
 ```
 
-- App: http://localhost:8000
-- API docs (OpenAPI): http://localhost:8000/docs
+- App: http://localhost:8090
+- API docs (OpenAPI): http://localhost:8090/docs
 
 ### Step by step (what the scripts do)
 
@@ -90,7 +90,7 @@ cp .env.example .env            # then set SECRET_KEY
 cd backend
 ../.venv/bin/python -m app.cli init-db
 ../.venv/bin/python -m app.cli create-user --email you@youragency.com --name "Your Name" --role FOUNDER
-../.venv/bin/uvicorn app.main:app --reload --port 8000
+../.venv/bin/uvicorn app.main:app --reload --port 8090
 ```
 
 ### Demo login (development only)
@@ -120,7 +120,7 @@ docker compose exec agencyos python -m app.cli create-user --email you@youragenc
 ```
 
 The image runs in production mode by default, applies migrations on start, listens on
-`127.0.0.1:8000`, and keeps data in the `agencyos-data` volume. Put an HTTPS reverse proxy in front.
+`127.0.0.1:8090` (change it with `AGENCYOS_PORT` in `.env`), and keeps data in the `agencyos-data` volume. Put an HTTPS reverse proxy in front.
 Full guide (checklist, Caddy/nginx, PostgreSQL, backups, upgrades, monitoring):
 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. Security review: **[docs/SECURITY.md](docs/SECURITY.md)**.
 
@@ -298,7 +298,7 @@ All settings are environment variables (or `.env`). See [.env.example](.env.exam
 | `WEB_RESEARCH_MAX_PAGES` / `WEB_RESEARCH_TIMEOUT_SECONDS` | `3` / `10` | Pages per site, seconds per request |
 | `WEB_RESEARCH_CONCURRENCY` / `WEB_RESEARCH_BULK_LIMIT` | `3` / `50` | Background checks at once / per bulk request |
 | `AGENCY_NAME`, `AGENCY_ADDRESS`, `SENDER_NAME`, `SENDER_EMAIL` | empty | Sender identity filled into email drafts |
-| `PUBLIC_BASE_URL` | `http://localhost:8000` | Base for unsubscribe links (use https in production) |
+| `PUBLIC_BASE_URL` | `http://localhost:8090` | Base for unsubscribe links (use https in production) |
 | `ENABLE_API_DOCS` | on except production | `/docs` and `/openapi.json` |
 | `MAX_REQUEST_BYTES` | `5242880` | Larger request bodies get 413 |
 | `LOGIN_ACCOUNT_LIMIT` / `LOGIN_ACCOUNT_WINDOW_SECONDS` | `5` / `900` | Failed logins per account before throttling |

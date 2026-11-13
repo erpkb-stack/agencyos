@@ -52,7 +52,7 @@ docker compose exec agencyos python -m app.cli create-user \
 docker compose exec agencyos python -m app.cli check-config
 ```
 
-The container listens on `127.0.0.1:8000` only; put the reverse proxy in front. Migrations run
+The container listens on `127.0.0.1:8090` only; put the reverse proxy in front. Migrations run
 automatically on start. Data lives in the `agencyos-data` volume.
 
 ### With PostgreSQL
@@ -74,7 +74,7 @@ Caddy obtains and renews TLS certificates automatically:
 ```caddyfile
 agencyos.example.com {
     encode gzip
-    reverse_proxy 127.0.0.1:8000
+    reverse_proxy 127.0.0.1:8090
 }
 ```
 
@@ -90,7 +90,7 @@ server {
     # ssl_certificate / ssl_certificate_key …
     client_max_body_size 6m;               # app limit is 5 MB (MAX_REQUEST_BYTES)
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8090;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -106,7 +106,7 @@ server {
 ```bash
 ./scripts/setup.sh            # venv, dependencies, .env with a random SECRET_KEY, database
 ./scripts/create_founder.sh you@youragency.com "Your Name"
-cd backend && ../.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+cd backend && ../.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8090 \
   --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
 ```
 

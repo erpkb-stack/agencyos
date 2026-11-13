@@ -1,6 +1,6 @@
 # AgencyOS — API Specification
 
-Base path: `/api/v1`. Interactive OpenAPI docs: `http://localhost:8000/docs`.
+Base path: `/api/v1`. Interactive OpenAPI docs: `http://localhost:8090/docs`.
 
 ## Conventions
 

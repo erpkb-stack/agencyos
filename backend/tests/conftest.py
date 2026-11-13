@@ -28,7 +28,7 @@ os.environ.update(
         "AGENCY_ADDRESS": "",
         "SENDER_NAME": "",
         "SENDER_EMAIL": "",
-        "PUBLIC_BASE_URL": "http://localhost:8000",
+        "PUBLIC_BASE_URL": "http://localhost:8090",
         "EMAIL_TRANSPORT": "disabled",
         "SMTP_HOST": "",
         "SMTP_USERNAME": "",

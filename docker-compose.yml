@@ -8,7 +8,7 @@ services:
     build: .
     image: agencyos:local
     ports:
-      - "127.0.0.1:8000:8000"   # localhost only; expose through your reverse proxy
+      - "127.0.0.1:${AGENCYOS_PORT:-8090}:8000"   # localhost only; set AGENCYOS_PORT in .env to change it
     env_file:
       - .env
     environment:
